@@ -23,3 +23,15 @@ plt.title('Stock Prices Over Time')
 plt.xlabel('Time')
 plt.ylabel('Price')
 plt.show()
+
+# First order differencing to remove any trend
+df_diff = df.diff().dropna()
+
+# Plot the differenced data
+plt.figure(figsize=(10, 5))
+plt.plot(df_diff, marker='o', color='green')
+plt.title('Differenced Stock Prices (First Order)')
+plt.xlabel('Time')
+plt.ylabel('Differenced Price')
+plt.show()
+
