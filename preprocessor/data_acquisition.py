@@ -27,4 +27,4 @@ if __name__ == "__main__":
     end_date = '2024-10-16'
     for ticker in tickers:
         path = f"data/raw/{ticker}.csv"
-        fetch_stock_data(ticker, start_date, end_date, '1m', path)
+        fetch_stock_data(ticker, start_date, end_date, '1d', path)
