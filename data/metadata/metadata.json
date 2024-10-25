@@ -1,0 +1,14 @@
+{
+    "AAPL": {
+        "industry": "Technology",
+        "cap": "Large"
+    },
+    "MSFT": {
+        "industry": "Technology",
+        "cap": "Large"
+    },
+    "GOOG": {
+        "industry": "Technology",
+        "cap": "Large"
+    }
+}

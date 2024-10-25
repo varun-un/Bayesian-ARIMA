@@ -13,6 +13,8 @@ def fetch_stock_data(ticker, start_date, end_date, interval, save_path):
     """
     stock = yf.Ticker(ticker)
     df = stock.history(start=start_date, end=end_date, interval=interval)
+
+    # create and save to folder
     if not os.path.exists(os.path.dirname(save_path)):
         os.makedirs(os.path.dirname(save_path))
     df.to_csv(save_path)
@@ -25,6 +27,8 @@ if __name__ == "__main__":
     # 'YYYY-MM-DD' format
     start_date = '2024-10-15'
     end_date = '2024-10-16'
+
+    # get and save data for each ticker
     for ticker in tickers:
         path = f"data/raw/{ticker}.csv"
         fetch_stock_data(ticker, start_date, end_date, '1d', path)
