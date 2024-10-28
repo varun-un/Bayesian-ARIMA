@@ -4,7 +4,7 @@ import os
 from statsmodels.tsa.stattools import adfuller
 
 """
-For the interval, I'm just gonna use closing times for the sake of simplicity
+For the interval, just use closing times for the sake of simplicity
 Gives 1 day period - using openings too could give roughly 16 hr and 8 hr off-cyclic periods, but after-market trading has different trends
     this would need differential indicators and 2 models trained: 1 for close -> open, 1 for open -> close
     trends due to after market are also less likely indicated by price action, but instead earnings calls, news, etc, so the model would struggle anyways
