@@ -1,10 +1,10 @@
-from .base_ensemble import BaseEnsemble
+from ..ensemble.ensemble import Ensemble
 import pandas as pd
 from typing import List
 from sklearn.linear_model import LinearRegression
 import numpy as np
 
-class RegressionEnsemble(BaseEnsemble):
+class RegressionEnsemble(Ensemble):
     def __init__(self):
         """
         Initialize the regression model.
