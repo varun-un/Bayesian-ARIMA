@@ -1,7 +1,7 @@
 import pymc3 as pm
 import numpy as np
 import pandas as pd
-from typing import Optional, Tuple
+from typing import Optional
 import theano.tensor as tt
 
 class BayesianARIMA:
@@ -37,17 +37,22 @@ class BayesianARIMA:
             exog_diff = exog.diff(self.d).dropna().values
             # Align exogenous variables with y_diff
             exog_diff = exog_diff[self.p:]
+        else:
+            exog_diff = None
 
         with pm.Model() as self.model:
-            # Priors for AR coefficients: p-dimensional
+            # Priors for AR coefficients
             phi = pm.Normal('phi', mu=0, sigma=10, shape=self.p)
             
-            # Priors for MA coefficients: q-dimensional
+            # Priors for MA coefficients
             theta = pm.Normal('theta', mu=0, sigma=10, shape=self.q)
             
             # Prior for exogenous coefficients (if any)
-            if exog is not None:
-                beta = pm.Normal('beta', mu=0, sigma=10, shape=exog_diff.shape[1] if exog_diff.ndim > 1 else 1)
+            if exog_diff is not None:
+                if exog_diff.ndim > 1:
+                    beta = pm.Normal('beta', mu=0, sigma=10, shape=exog_diff.shape[1])
+                else:
+                    beta = pm.Normal('beta', mu=0, sigma=10)
             
             # Prior for noise
             sigma = pm.HalfNormal('sigma', sigma=1)
@@ -60,22 +65,21 @@ class BayesianARIMA:
                 mu += phi[i] * y_diff[self.p - i - 1 : -i -1]
             
             # MA component
-            # Introduce latent variables for past errors
             if self.q > 0:
-
                 # Initialize latent error terms
-                eps = pm.Normal('eps', mu=0, sigma=sigma, shape=self.q)
+                eps = pm.Normal('eps', mu=0, sigma=sigma, shape=len(y_diff))
+                
+                # Incorporate MA terms
                 for j in range(self.q):
-                    mu += theta[j] * eps[j]
-
-                # Shifted errors for MA terms
-                eps_shifted = tt.zeros_like(y_diff)
-                eps_shifted = tt.inc_subtensor(eps_shifted[self.q:], eps[:-self.q])
-                mu += tt.dot(theta, eps_shifted.T)
+                    if j < len(eps):
+                        mu += theta[j] * eps[self.p + j - 1]
             
             # Exogenous variables
-            if exog is not None:
-                mu += tt.dot(beta, exog_diff.T)
+            if exog_diff is not None:
+                if exog_diff.ndim > 1:
+                    mu += tt.dot(beta, exog_diff.T)
+                else:
+                    mu += beta * exog_diff
             
             # Likelihood
             y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y_diff[self.p:])

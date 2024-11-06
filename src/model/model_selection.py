@@ -18,7 +18,6 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, seasonal=True, m=1)
         start_q=0,
         max_p=max_p,
         max_q=max_q,
-        d=None,
         max_d=max_d,
         seasonal=seasonal,
         m=m,
@@ -31,7 +30,7 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, seasonal=True, m=1)
 
 if __name__ == "__main__":
 
-    from ..preprocessor.preprocess import load_data
+    from ..preprocessor.preprocessor import load_data
 
     ticker = 'AAPL'
     processed_path = f"data/processed/{ticker}_processed.csv"
@@ -39,6 +38,4 @@ if __name__ == "__main__":
     log_returns = df['Log_Returns']
     
     order = determine_arima_order(log_returns)
-    save_arima_order(ticker, order)
-    loaded_order = load_arima_order(ticker)
-    print(f"Loaded ARIMA order for {ticker}: {loaded_order}")
+    print(f"Optimal ARIMA order for {ticker}: {order}")
