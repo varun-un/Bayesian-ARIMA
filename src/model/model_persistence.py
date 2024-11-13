@@ -1,16 +1,34 @@
 import pickle
+from typing import Tuple
 
-def save_model(model, filepath: str):
+def save_model(self, filepath: str, model, trace):
     """
-    Serialize and save the model to a file.
+    Save the trained model and trace.
+    
+    Parameters:
+    - filepath: Path to save the model.
+    - model: Trained model.
+    - trace: Trace from the model.
     """
+    import pickle
     with open(filepath, 'wb') as f:
-        pickle.dump(model, f)
+        pickle.dump({'model': self.model, 'trace': self.trace}, f)
 
-def load_model(filepath: str):
+def load_model(self, filepath: str) -> Tuple:
     """
-    Load and deserialize the model from a file.
+    Load the model and trace from a file.
+    
+    Parameters:
+    - filepath: Path to load the model from.
+
+    Returns:
+    - model: Trained model.
+    - trace: Trace from the model.
     """
+    import pickle
     with open(filepath, 'rb') as f:
-        model = pickle.load(f)
-    return model
+        data = pickle.load(f)
+        model = data['model']
+        trace = data['trace']
+
+    return model, trace

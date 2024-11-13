@@ -1,8 +1,11 @@
+# Bayesian code inspired off math described in: https://www.columbia.edu/~mh2078/MachineLearningORFE/MCMC_Bayes.pdf
+
 import pymc3 as pm
 import numpy as np
 import pandas as pd
 from typing import Optional
 import theano.tensor as tt
+from model_persistence import save_model, load_model
 
 class BayesianARIMA:
     def __init__(self, p: int, d: int, q: int, seasonal: bool = False, m: int = 1):
@@ -35,7 +38,8 @@ class BayesianARIMA:
         y_diff = y.diff(self.d).dropna().values
         if exog is not None:
             exog_diff = exog.diff(self.d).dropna().values
-            # Align exogenous variables with y_diff
+            
+            # exog needs to be made same size as primary series
             exog_diff = exog_diff[self.p:]
         else:
             exog_diff = None
@@ -47,19 +51,21 @@ class BayesianARIMA:
             # Priors for MA coefficients
             theta = pm.Normal('theta', mu=0, sigma=10, shape=self.q)
             
-            # Prior for exogenous coefficients (if any)
+            # if the exog is being used, add a prior for the beta coefficient
             if exog_diff is not None:
                 if exog_diff.ndim > 1:
                     beta = pm.Normal('beta', mu=0, sigma=10, shape=exog_diff.shape[1])
                 else:
                     beta = pm.Normal('beta', mu=0, sigma=10)
             
-            # Prior for noise
+            # prior for the noise - half normal to keep positive
             sigma = pm.HalfNormal('sigma', sigma=1)
             
-            # Define the ARIMA process
+            # initialize mu to zeros
             mu = tt.zeros_like(y_diff)
             
+            # Use summations to sum up AR, MA, and error terms (and exog if exists)
+
             # AR component
             for i in range(self.p):
                 mu += phi[i] * y_diff[self.p - i - 1 : -i -1]
@@ -81,7 +87,7 @@ class BayesianARIMA:
                 else:
                     mu += beta * exog_diff
             
-            # Likelihood
+            # likelihood of observations on the differenced series - Bayesian update step
             y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y_diff[self.p:])
             
             # Sampling - PyMC3 uses Hamiltonian Monte Carlo (MCMC) for sampling
@@ -102,7 +108,8 @@ class BayesianARIMA:
         if self.trace is None:
             raise ValueError("Model has not been trained yet.")
         
-        # Extract posterior means
+        # Extract posterior means for AR, MA, and sigma
+        # Bayesian posterior distribution
         phi_post = self.trace.posterior['phi'].mean(dim=['chain', 'draw']).values
         theta_post = self.trace.posterior['theta'].mean(dim=['chain', 'draw']).values
         sigma_post = self.trace.posterior['sigma'].mean(dim=['chain', 'draw']).values
@@ -111,32 +118,31 @@ class BayesianARIMA:
             exog_future_diff = exog_future.diff(self.d).dropna().values
             exog_future_diff = exog_future_diff[-steps:]
         
-        # Initialize forecast list
+        # forward forecasts
         forecast = []
         
-        # Initialize state with last p observations
+        # Get the last p observations for use in time series forecasting
         if last_observations is None:
             raise ValueError("Last observations must be provided for forecasting.")
         ar_terms = list(last_observations[-self.p:])
         ma_terms = [0] * self.q  # Initialize MA terms with zeros
         
-        # use vectors and dot products to do the linear combination of series terms with AR/MA parameters
+        # Since multi-dimensional, dot products can be used to do lienar combinations of weights with AR, MA terms
         for step in range(steps):
-            # AR component
+
             ar_component = np.dot(phi_post, ar_terms[-self.p:])
             
-            # MA component
             ma_component = np.dot(theta_post, ma_terms[-self.q:]) if self.q > 0 else 0
             
-            # Exogenous component
+            # Exogenous component, if applicable
             exog_component = 0
             if exog_future is not None:
                 exog_component = np.dot(self.trace.posterior['beta'].mean(dim=['chain', 'draw']).values, exog_future_diff[step])
             
-            # Noise term
+            # Sample from the noise distribution
             epsilon = np.random.normal(0, sigma_post)
             
-            # Forecasted value
+            # sum components for total arima forecast
             y_hat = ar_component + ma_component + exog_component + epsilon
             forecast.append(y_hat)
             
@@ -145,30 +151,6 @@ class BayesianARIMA:
             if self.q > 0:
                 ma_terms.append(epsilon)
         
-        # Convert to pandas Series
+        # series data 
         forecast_series = pd.Series(forecast, name='Forecast')
         return forecast_series
-
-    def save_model(self, filepath: str):
-        """
-        Save the trained model and trace.
-        
-        Parameters:
-        - filepath: Path to save the model.
-        """
-        import pickle
-        with open(filepath, 'wb') as f:
-            pickle.dump({'model': self.model, 'trace': self.trace}, f)
-
-    def load_model(self, filepath: str):
-        """
-        Load the model and trace from a file.
-        
-        Parameters:
-        - filepath: Path to load the model from.
-        """
-        import pickle
-        with open(filepath, 'rb') as f:
-            data = pickle.load(f)
-            self.model = data['model']
-            self.trace = data['trace']
