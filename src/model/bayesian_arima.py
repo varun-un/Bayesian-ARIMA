@@ -48,8 +48,8 @@ class BayesianARIMA:
             # make sure exog and y_diff are same length
             min_len = min(len(y_diff), len(exog_diff))
             
-            y_diff = y_diff[:min_len]
-            exog_diff = exog_diff[:min_len]
+            y_diff = y_diff[-min_len:]          # take the latest min_len elements
+            exog_diff = exog_diff[-min_len:]
         else:
             exog_diff = None
 
@@ -211,7 +211,7 @@ class BayesianARIMA:
 
         if filename is None:
             filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
-            
+
         with open(filename, 'rb') as f:
             data = pickle.load(f)
             self.model = data['model']
