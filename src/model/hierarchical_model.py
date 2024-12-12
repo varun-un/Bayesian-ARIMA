@@ -89,3 +89,55 @@ class HierarchicalModel:
         for timeframe, model in self.models.items():
             forecasts[timeframe] = model.predict(steps)
         return forecasts
+    
+    def predict_to_time(self, delta_t: pd.Timedelta) -> Dict[str, pd.Series]:
+        """
+        Generate forecasts from all models up to a specific time in the future.
+
+        Parameters:
+        - delta_t: The time into the future to forecast to.
+
+        Returns:
+        - dict: Dictionary of values predicted at the specific time in the future. Keys are 'monthly', 'daily', 'hourly', 'minute'.
+                Values are the value at the specific time in the future. Linear interpolation is used for delta_t not divisible by the interval.
+        """
+        # number of steps to take based on interval
+        delta_t_minutes = delta_t.total_seconds() / 60
+        delta_t_hours = delta_t.total_seconds() / 3600
+        delta_t_days = delta_t.total_seconds() / (3600 * 24)
+        delta_t_months = delta_t.days / 30
+
+        deltas = {
+            'monthly': delta_t_months,
+            'daily': delta_t_days,
+            'hourly': delta_t_hours,
+            'minute': delta_t_minutes
+        }
+
+        steps = {}      # number of steps to take for each interval
+        for timeframe, delta in deltas.items():
+            if delta % 1 != 0:
+                # round up if not divisible by interval
+                steps[timeframe] = int(delta) + 1  
+            else:
+                steps[timeframe] = int(delta)
+
+        forecasts = {}      # forecasted values for each interval - each entry is a pd.Series
+        for timeframe, model in self.models.items():
+            forecasts[timeframe] = model.predict(steps[timeframe])
+
+        # get the actual prediction value - take last value or interpolate
+        predictions = {}
+
+        for timeframe, forecast in forecasts.items():
+            # if the key's delta is a decimal, interpolate by that decimal value
+            if deltas[timeframe] % 1 != 0:
+                # get the two closest values
+                lower = forecast.iloc[-2]
+                upper = forecast.iloc[-1]
+                # interpolate
+                predictions[timeframe] = lower + (upper - lower) * (deltas[timeframe] % 1)
+            else:
+                predictions[timeframe] = forecast.iloc[-1]
+
+        return predictions
