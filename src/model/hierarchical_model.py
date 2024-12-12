@@ -22,6 +22,7 @@ class HierarchicalModel:
         """
         Initializes the HierarchicalModel with empty models and seasonality values.
         """
+        # dict of BayesianARIMA models for each timeframe
         self.models = {
             'monthly': None,
             'daily': None,
@@ -34,6 +35,19 @@ class HierarchicalModel:
             'hourly': 6,
             'minute': 1
         }
+        self.interval = {
+            'monthly': '1mo',
+            'daily': '1d',
+            'hourly': '1h',
+            'minute': '1m'
+        }
+        self.range = {
+            'monthly': '20y',
+            'daily': '20y',
+            'hourly': '2y',
+            'minute': '1mo'
+        }
+
 
     def add_model(self, timeframe: str, model: BayesianARIMA):
         """
@@ -200,3 +214,6 @@ class HierarchicalModel:
                 labelled_forecasts[timeframe].index = labelled_forecasts[timeframe].index.shift(1)
 
         return labelled_forecasts
+
+
+        
