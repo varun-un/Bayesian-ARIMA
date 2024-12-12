@@ -5,14 +5,20 @@ import numpy as np
 import pandas as pd
 from typing import Optional
 import theano.tensor as tt
-from model_persistence import save_model, load_model
+
+import pickle
+from typing import Tuple
+from pathlib import Path
+
+
 
 class BayesianARIMA:
-    def __init__(self, p: int, d: int, q: int, seasonal: bool = False, m: int = 1):
+    def __init__(self, name: str, p: int, d: int, q: int, seasonal: bool = False, m: int = 1):
         """
         Initialize Bayesian ARIMA with specified order.
         
         Parameters:
+        - name: Name of the model. Will be used for saving and loading.
         - p: Number of autoregressive terms.
         - d: Number of nonseasonal differences.
         - q: Number of moving average terms.
@@ -47,7 +53,9 @@ class BayesianARIMA:
         else:
             exog_diff = None
 
-        with pm.Model() as self.model:
+        self.model = pm.Model()
+
+        with self.model:
             # Priors for AR coefficients
             phi = pm.Normal('phi', mu=0, sigma=10, shape=self.p)
             
@@ -175,3 +183,36 @@ class BayesianARIMA:
         # series data 
         forecast_series = pd.Series(forecast, name='Forecast')
         return forecast_series
+    
+    def save(self) -> str:
+        """
+        Save the model to a file.
+        
+        Returns:
+        - str: Path to the saved model.
+        """
+        if self.model is None:
+            raise ValueError("Model has not been trained yet.")
+        
+        filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
+        
+        with open(filename, "wb") as f:
+            pickle.dump({'model': self.model, 'trace': self.trace}, f)
+        
+        return filename
+    
+    def load(self, filename: str = None):
+        """
+        Load the model from a file.
+        
+        Parameters:
+        - filename: Path to the saved model. If None, uses the default naming convention.
+        """
+
+        if filename is None:
+            filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
+            
+        with open(filename, 'rb') as f:
+            data = pickle.load(f)
+            self.model = data['model']
+            self.trace = data['trace']
