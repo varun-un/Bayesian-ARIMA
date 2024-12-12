@@ -38,9 +38,12 @@ class BayesianARIMA:
         y_diff = y.diff(self.d).dropna().values
         if exog is not None:
             exog_diff = exog.diff(self.d).dropna().values
+
+            # make sure exog and y_diff are same length
+            min_len = min(len(y_diff), len(exog_diff))
             
-            # exog needs to be made same size as primary series
-            exog_diff = exog_diff[self.p:]
+            y_diff = y_diff[:min_len]
+            exog_diff = exog_diff[:min_len]
         else:
             exog_diff = None
 
@@ -67,8 +70,8 @@ class BayesianARIMA:
             # Use summations to sum up AR, MA, and error terms (and exog if exists)
 
             # AR component
-            for i in range(self.p):
-                mu += phi[i] * y_diff[self.p - i - 1 : -i -1]
+            for i in range(1, self.p + 1):
+                mu += phi[i - 1] * y_diff[self.p - i : -i] 
             
             # MA component
             if self.q > 0:
@@ -76,16 +79,16 @@ class BayesianARIMA:
                 eps = pm.Normal('eps', mu=0, sigma=sigma, shape=len(y_diff))
                 
                 # Incorporate MA terms
-                for j in range(self.q):
-                    if j < len(eps):
-                        mu += theta[j] * eps[self.p + j - 1]
+                for j in range(1, self.q + 1):
+                    mu += theta[j - 1] * eps[self.p - j : len(y_diff) - j]
             
             # Exogenous variables
             if exog_diff is not None:
+                exog_diff_tensor = tt.as_tensor_variable(exog_diff)     # convert to theano tensor
                 if exog_diff.ndim > 1:
-                    mu += tt.dot(beta, exog_diff.T)
+                    mu += tt.dot(exog_diff_tensor, beta)
                 else:
-                    mu += beta * exog_diff
+                    mu += beta * exog_diff_tensor
             
             # likelihood of observations on the differenced series - Bayesian update step
             y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y_diff[self.p:])
@@ -108,14 +111,22 @@ class BayesianARIMA:
         if self.trace is None:
             raise ValueError("Model has not been trained yet.")
         
-        # Extract posterior means for AR, MA, and sigma
+        # posterior means for AR, MA, and sigma
         # Bayesian posterior distribution
         phi_post = self.trace.posterior['phi'].mean(dim=['chain', 'draw']).values
         theta_post = self.trace.posterior['theta'].mean(dim=['chain', 'draw']).values
         sigma_post = self.trace.posterior['sigma'].mean(dim=['chain', 'draw']).values
+
+        # posterior mean for beta if exogenous variables were used
+        if exog_future is not None:
+            beta_post = self.trace.posterior['beta'].mean(dim=['chain', 'draw']).values
+        else:
+            beta_post = None
         
         if exog_future is not None:
             exog_future_diff = exog_future.diff(self.d).dropna().values
+
+            # make sure exog_future_diff is same length as steps
             exog_future_diff = exog_future_diff[-steps:]
         
         # forward forecasts
@@ -124,10 +135,15 @@ class BayesianARIMA:
         # Get the last p observations for use in time series forecasting
         if last_observations is None:
             raise ValueError("Last observations must be provided for forecasting.")
-        ar_terms = list(last_observations[-self.p:])
-        ma_terms = [0] * self.q  # Initialize MA terms with zeros
         
-        # Since multi-dimensional, dot products can be used to do lienar combinations of weights with AR, MA terms
+        # if last_observations is not the right length, take the last observation and repeat it to match p
+        if len(last_observations) != self.p:
+            last_observations = np.repeat(last_observations[-1], self.p)
+        
+        ar_terms = list(last_observations[-self.p:])
+        ma_terms = [0] * self.q  # initialize MA terms with zeros
+        
+        # since multi-dimensional, dot products can be used to do lienar combinations of weights with AR, MA terms
         for step in range(steps):
 
             ar_component = np.dot(phi_post, ar_terms[-self.p:])
@@ -137,7 +153,12 @@ class BayesianARIMA:
             # exogenous component
             exog_component = 0
             if exog_future is not None:
-                exog_component = np.dot(self.trace.posterior['beta'].mean(dim=['chain', 'draw']).values, exog_future_diff[step])
+
+                # multidimensional exog
+                if exog_future_diff.ndim > 1:
+                    exog_component = np.dot(beta_post, exog_future_diff[step])
+                else:
+                    exog_component = beta_post * exog_future_diff[step]
             
             # sample from the noise distribution
             epsilon = np.random.normal(0, sigma_post)
