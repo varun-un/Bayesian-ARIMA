@@ -10,7 +10,6 @@ def save_model(self, filepath: str, model, trace):
     - model: Trained model.
     - trace: Trace from the model.
     """
-    import pickle
     with open(filepath, 'wb') as f:
         pickle.dump({'model': self.model, 'trace': self.trace}, f)
 
@@ -25,7 +24,6 @@ def load_model(self, filepath: str) -> Tuple:
     - model: Trained model.
     - trace: Trace from the model.
     """
-    import pickle
     with open(filepath, 'rb') as f:
         data = pickle.load(f)
         model = data['model']

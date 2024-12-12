@@ -9,6 +9,9 @@ class WeightedAverageEnsemble(Ensemble):
         """
         self.weights = weights
 
+    def train(self, forecasts: List[pd.Series], actual: pd.Series):
+        return super().train(forecasts, actual)
+
     def ensemble(self, forecasts: List[pd.Series]) -> pd.Series:
         """
         Combine forecasts using weighted average.

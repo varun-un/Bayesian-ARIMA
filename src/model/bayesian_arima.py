@@ -134,12 +134,12 @@ class BayesianARIMA:
             
             ma_component = np.dot(theta_post, ma_terms[-self.q:]) if self.q > 0 else 0
             
-            # Exogenous component, if applicable
+            # exogenous component
             exog_component = 0
             if exog_future is not None:
                 exog_component = np.dot(self.trace.posterior['beta'].mean(dim=['chain', 'draw']).values, exog_future_diff[step])
             
-            # Sample from the noise distribution
+            # sample from the noise distribution
             epsilon = np.random.normal(0, sigma_post)
             
             # sum components for total arima forecast

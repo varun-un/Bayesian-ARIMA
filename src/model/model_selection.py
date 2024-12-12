@@ -30,7 +30,7 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, seasonal=True, m=1)
 
 if __name__ == "__main__":
 
-    from ..preprocessor.preprocessor import load_data
+    from ..preprocessing.preprocessor import load_data
 
     ticker = 'AAPL'
     processed_path = f"data/processed/{ticker}_processed.csv"
