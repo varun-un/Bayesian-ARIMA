@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Optional
 from abc import ABC, abstractmethod
 from ..ensemble.ensemble import Ensemble
 
@@ -10,101 +10,94 @@ class RegressionEnsemble(Ensemble):
     Online Ridge Regression Ensemble Method
 
     Based off: https://www.ibm.com/topics/ridge-regression
+
+    Use ridge regression instead of lasso regression to avoid sparsity in the weights - want to consider all models.
     """
 
-    def __init__(self, 
-                 learning_rate: float = 0.1, 
-                 regularization: float = 1e-4):
+    def __init__(self, regularization: float = 1e-4):
         """
         Initialize the Online RegressionEnsemble.
         
         Parameters:
-        - learning_rate (float): Controls the step size of weight updates (default=0.1) 
         - regularization (float): L2 regularization parameter to prevent overfitting (default=1e-4) 
         """
         self.weights = None
-        self.learning_rate = learning_rate
         self.regularization = regularization
         
         # cumulative statistics for incremental learning
-        # storing these are what the online algorithm affects, so we can update the weights easily
+        # storing these allows easy updates to weights using online algorithms
         self.total_observations = 0
         self.cumulative_XtX = None  # Σ (X^T * X)
         self.cumulative_Xty = None  # Σ (X^T * y)
     
-    def train(self, forecasts: List[pd.Series], actual: pd.Series):
+    def train(self, forecasts: List[float], actual: float):
         """
         Incrementally train the regression using online learning.
         
         Parameters:
-        - forecasts (List[pd.Series]): A list of prediction series from different models
-        - actual (pd.Series): The ground truth time series
+        - forecasts (List[float]): A list of prediction values from different models
+        - actual (float): The ground truth value for the current time step
         """
-        # align all the data series so they can be concurrently indexed (corresponding points)
-        aligned_forecasts = []
-        for forecast in forecasts:
-            aligned_forecast = forecast.reindex(actual.index).fillna(0)
-            aligned_forecasts.append(aligned_forecast)
-        
-        X = np.column_stack([forecast.values for forecast in aligned_forecasts])
-        y = actual.values
-        
-        # if first training iteration, initialize weights and cumulative statistics
-        if self.weights is None:
-            self.weights = np.ones(X.shape[1]) / X.shape[1]
-            self.cumulative_XtX = X.T @ X
-            self.cumulative_Xty = X.T @ y
+        # convert forecasts to a numpy array (feature vector)
+        X = np.array(forecasts).reshape(-1, 1) # shape: (num_models, 1)
+        y = actual  
+
+        # cumulative statistics
+        if self.cumulative_XtX is None:
+            self.cumulative_XtX = X @ X.T  # shape: (num_models, num_models)
+            self.cumulative_Xty = X.flatten() * y  # shape: (num_models,)
         else:
-            # Update cumulative statistics
-            self.cumulative_XtX += X.T @ X
-            self.cumulative_Xty += X.T @ y
-        
-        self.total_observations += X.shape[0]
-        
-        # adding small L2 regularization to the diagonal of the XtX matrix - ridge regression
-        regularization_matrix = np.eye(X.shape[1]) * self.regularization
-        
+            self.cumulative_XtX += X @ X.T
+            self.cumulative_Xty += X.flatten() * y
+
+        self.total_observations += 1
+
+        # add L2 regularization to the diagonal of the XtX matrix - ridge regression
+        regularization_matrix = np.eye(X.shape[0]) * self.regularization
+
+        previous_weights = self.weights
+
         try:
-            # Compute weights using regularized inverse
-            self.weights = np.linalg.solve(
-                self.cumulative_XtX + regularization_matrix, 
-                self.cumulative_Xty
-            )
+            # weights = (XtX + lambda * I)^-1 * Xty     (from the paper/website)
+            XtX_reg = self.cumulative_XtX + regularization_matrix
+            self.weights = np.linalg.solve(XtX_reg, self.cumulative_Xty)
             
-            # keep weights are non-negative and sum to 1
+            # ensure weights are non-negative and normalize to sum to 1
             self.weights = np.maximum(self.weights, 0)
-            self.weights /= np.sum(self.weights)
+            weight_sum = np.sum(self.weights)
+            if weight_sum > 0:
+                self.weights /= weight_sum
+            else:
+                # if weights are 0, default to uniform weights
+                self.weights = np.ones(X.shape[0]) / X.shape[0]
+
         except np.linalg.LinAlgError:
-            print("Error detected. Maintaining previous weights.")
-    
-    def ensemble(self, forecasts: List[pd.Series]) -> pd.Series:
+            print("Error occurred with ridge regression, using previous weights.")
+            self.weights = previous_weights
+
+    def ensemble(self, forecasts: List[float]) -> float:
         """
         Combine forecasts using the learned optimal weights.
         
         Parameters:
-        - forecasts (List[pd.Series]): A list of prediction series from different models
+        - forecasts (List[float]): A list of prediction values from different models
         
         Returns:
-        - pd.Series: The combined forecast using learned weights
+        - float: The combined forecast using learned weights
         """
-        # Check if weights have been learned
+
         if self.weights is None:
             raise ValueError("Ensemble must be trained before making predictions.")
         
-        # Check that number of forecasts matches training
+        # check that number of forecasts matches training
         if len(forecasts) != len(self.weights):
             raise ValueError("Number of forecasts must match number of models used during training.")
         
-        # Align forecasts and apply weights
-        weighted_forecasts = []
-        for forecast, weight in zip(forecasts, self.weights):
-            weighted_forecasts.append(forecast * weight)
+        # forecasts to a numpy array
+        X = np.array(forecasts)  # Shape: (num_models,)
         
-        # Sum the weighted forecasts
-        ensemble_forecast = pd.Series(
-            np.sum(np.column_stack([f.values for f in weighted_forecasts]), axis=1),
-            index=forecasts[0].index
-        )
+        # weighted sum
+        ensemble_forecast = np.dot(self.weights, X)
         
         return ensemble_forecast
     

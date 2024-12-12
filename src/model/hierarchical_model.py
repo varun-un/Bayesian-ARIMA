@@ -5,7 +5,7 @@ from typing import Dict
 
 class HierarchicalModel:
     """
-    This class represents one ticker, which will have sector and industry data as well as 4 ARIMA models.
+    This class represents one ticker, which will have 4 ARIMA models.
     Each model has different timeframes and seasonality. The range of data available with the yfinance api is 
     also different for each interval.
     - Monthly: Interval = 30 days, Seasonality = 12
@@ -18,12 +18,10 @@ class HierarchicalModel:
     """
 
 
-    def __init__(self, sector: str, industry: str):
+    def __init__(self):
         """
-        Initialize with sector and industry names.
+        Initializes the HierarchicalModel with empty models and seasonality values.
         """
-        self.sector = sector
-        self.industry = industry
         self.models = {
             'monthly': None,
             'daily': None,

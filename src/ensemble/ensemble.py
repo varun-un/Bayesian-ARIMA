@@ -10,14 +10,14 @@ class Ensemble(ABC):
     """
 
     @abstractmethod
-    def ensemble(self, forecasts: List[pd.Series]) -> pd.Series:
+    def ensemble(self, forecasts: List[float]) -> float:
         """
         Abstract method to combine forecasts. Performs the forward pass of the ensemble.
         """
         pass
 
     @abstractmethod
-    def train(self, forecasts: List[pd.Series], actual: pd.Series):
+    def train(self, forecasts: List[float], actual: float):
         """
         Abstract method to train the ensemble.
         """

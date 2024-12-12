@@ -1,5 +1,6 @@
 from ..ensemble.ensemble import Ensemble
 import pandas as pd
+import numpy as np
 from typing import List
 
 class WeightedAverageEnsemble(Ensemble):
@@ -9,17 +10,16 @@ class WeightedAverageEnsemble(Ensemble):
         """
         self.weights = weights
 
-    def train(self, forecasts: List[pd.Series], actual: pd.Series):
+    def train(self, forecasts: List[float], actual: float):
         return super().train(forecasts, actual)
 
-    def ensemble(self, forecasts: List[pd.Series]) -> pd.Series:
+    def ensemble(self, forecasts: List[float]) -> float:
         """
         Combine forecasts using weighted average.
         """
         if len(forecasts) != len(self.weights):
             raise ValueError("Number of forecasts and weights must match.")
         
-        combined = pd.Series(0.0, index=forecasts[0].index)
-        for forecast, weight in zip(forecasts, self.weights):
-            combined += forecast * weight
-        return combined
+        forecast = np.dot(forecasts, self.weights)
+
+        return forecast
