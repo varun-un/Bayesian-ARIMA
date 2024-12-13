@@ -46,17 +46,17 @@ class BayesianARIMA:
         self.model = pm.Model()
 
         with self.model:
-            # Priors for AR coefficients
+            # priors for AR coefficients
             phi = pm.Normal('phi', mu=0, sigma=10, shape=self.p)
             
-            # Priors for MA coefficients
+            # priors for MA coefficients
             theta = pm.Normal('theta', mu=0, sigma=10, shape=self.q)
             
             # prior for the noise - half normal to keep positive
             sigma = pm.HalfNormal('sigma', sigma=1)
             
-            # initialize mu to zeros
-            mu = tt.zeros_like(y_diff)
+            # Initialize mu to zeros with shape (N-p,)
+            mu = tt.zeros(len(y_diff) - self.p)
             
             # Use summations to sum up AR, MA, and error terms (and exog if exists)
 
@@ -66,12 +66,12 @@ class BayesianARIMA:
             
             # MA component
             if self.q > 0:
-                # Initialize latent error terms
-                eps = pm.Normal('eps', mu=0, sigma=sigma, shape=len(y_diff))
+                #  latent error terms
+                eps = pm.Normal('eps', mu=0, sigma=sigma, shape=len(y_diff) + self.q)   # pad shape (N+q,) to avoid indexing errors
                 
-                # Incorporate MA terms
+                # MA terms
                 for j in range(1, self.q + 1):
-                    mu += theta[j - 1] * eps[self.p - j : -j]
+                    mu += theta[j - 1] * eps[self.p + self.q - j : -j]      # shift by p+q to match AR terms - indexing due to q-padding
             
             # likelihood of observations on the differenced series - Bayesian update step
             y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y_diff[self.p:])
@@ -104,7 +104,7 @@ class BayesianARIMA:
         
         # Get the last p observations for use in time series forecasting
         if last_observations is None:
-            raise ValueError("Last observations must be provided for forecasting.")
+            raise ValueError("Observations must be provided for forecasting")
         
         # if last_observations is not the right length, take the last observation and repeat it to match p
         if len(last_observations) != self.p:
@@ -127,7 +127,7 @@ class BayesianARIMA:
             y_hat = ar_component + ma_component + epsilon
             forecast.append(y_hat)
             
-            # Update state
+            # update state
             ar_terms.append(y_hat)
             if self.q > 0:
                 ma_terms.append(epsilon)
