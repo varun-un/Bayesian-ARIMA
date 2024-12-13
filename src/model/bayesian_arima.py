@@ -1,10 +1,10 @@
 # Bayesian code inspired off math described in: https://www.columbia.edu/~mh2078/MachineLearningORFE/MCMC_Bayes.pdf
 
-import pymc3 as pm
+import pymc as pm
 import numpy as np
 import pandas as pd
 from typing import Optional
-import theano.tensor as tt
+import aesara.tensor as tt
 
 import pickle
 from typing import Tuple
@@ -33,7 +33,7 @@ class BayesianARIMA:
         self.model = None
         self.trace = None
 
-    def train(self, y: pd.Series, exog: Optional[pd.Series] = None):
+    def train(self, y: pd.Series):
         """
         Train the Bayesian ARIMA model using PyMC3.
         
@@ -42,16 +42,6 @@ class BayesianARIMA:
         """
         # Differencing
         y_diff = y.diff(self.d).dropna().values
-        if exog is not None:
-            exog_diff = exog.diff(self.d).dropna().values
-
-            # make sure exog and y_diff are same length
-            min_len = min(len(y_diff), len(exog_diff))
-            
-            y_diff = y_diff[-min_len:]          # take the latest min_len elements
-            exog_diff = exog_diff[-min_len:]
-        else:
-            exog_diff = None
 
         self.model = pm.Model()
 
@@ -61,13 +51,6 @@ class BayesianARIMA:
             
             # Priors for MA coefficients
             theta = pm.Normal('theta', mu=0, sigma=10, shape=self.q)
-            
-            # if the exog is being used, add a prior for the beta coefficient
-            if exog_diff is not None:
-                if exog_diff.ndim > 1:
-                    beta = pm.Normal('beta', mu=0, sigma=10, shape=exog_diff.shape[1])
-                else:
-                    beta = pm.Normal('beta', mu=0, sigma=10)
             
             # prior for the noise - half normal to keep positive
             sigma = pm.HalfNormal('sigma', sigma=1)
@@ -88,15 +71,7 @@ class BayesianARIMA:
                 
                 # Incorporate MA terms
                 for j in range(1, self.q + 1):
-                    mu += theta[j - 1] * eps[self.p - j : len(y_diff) - j]
-            
-            # Exogenous variables
-            if exog_diff is not None:
-                exog_diff_tensor = tt.as_tensor_variable(exog_diff)     # convert to theano tensor
-                if exog_diff.ndim > 1:
-                    mu += tt.dot(exog_diff_tensor, beta)
-                else:
-                    mu += beta * exog_diff_tensor
+                    mu += theta[j - 1] * eps[self.p - j : -j]
             
             # likelihood of observations on the differenced series - Bayesian update step
             y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y_diff[self.p:])
@@ -104,14 +79,13 @@ class BayesianARIMA:
             # Sampling - PyMC3 uses Hamiltonian Monte Carlo (MCMC) for sampling
             self.trace = pm.sample(draws=1000, tune=1000, target_accept=0.95, return_inferencedata=True)
 
-    def predict(self, steps: int, last_observations: Optional[np.ndarray] = None, exog_future: Optional[pd.Series] = None) -> pd.Series:
+    def predict(self, steps: int, last_observations: Optional[np.ndarray] = None) -> pd.Series:
         """
         Generate forecasts using the posterior samples.
         
         Parameters:
         - steps: Number of future steps to predict.
         - last_observations: Last p observations from the differenced series.
-        - exog_future: Future exogenous variables.
         
         Returns:
         - pd.Series: Forecasted values.
@@ -124,18 +98,6 @@ class BayesianARIMA:
         phi_post = self.trace.posterior['phi'].mean(dim=['chain', 'draw']).values
         theta_post = self.trace.posterior['theta'].mean(dim=['chain', 'draw']).values
         sigma_post = self.trace.posterior['sigma'].mean(dim=['chain', 'draw']).values
-
-        # posterior mean for beta if exogenous variables were used
-        if exog_future is not None:
-            beta_post = self.trace.posterior['beta'].mean(dim=['chain', 'draw']).values
-        else:
-            beta_post = None
-        
-        if exog_future is not None:
-            exog_future_diff = exog_future.diff(self.d).dropna().values
-
-            # make sure exog_future_diff is same length as steps
-            exog_future_diff = exog_future_diff[-steps:]
         
         # forward forecasts
         forecast = []
@@ -158,21 +120,11 @@ class BayesianARIMA:
             
             ma_component = np.dot(theta_post, ma_terms[-self.q:]) if self.q > 0 else 0
             
-            # exogenous component
-            exog_component = 0
-            if exog_future is not None:
-
-                # multidimensional exog
-                if exog_future_diff.ndim > 1:
-                    exog_component = np.dot(beta_post, exog_future_diff[step])
-                else:
-                    exog_component = beta_post * exog_future_diff[step]
-            
             # sample from the noise distribution
             epsilon = np.random.normal(0, sigma_post)
             
             # sum components for total arima forecast
-            y_hat = ar_component + ma_component + exog_component + epsilon
+            y_hat = ar_component + ma_component + epsilon
             forecast.append(y_hat)
             
             # Update state
