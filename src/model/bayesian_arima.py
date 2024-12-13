@@ -110,8 +110,18 @@ class BayesianARIMA:
         if len(last_observations) != self.p:
             last_observations = np.repeat(last_observations[-1], self.p)
         
+        # get the last p observations for AR components
         ar_terms = list(last_observations[-self.p:])
-        ma_terms = [0] * self.q  # initialize MA terms with zeros
+
+        # use posterior samples for eps if q > 0
+        if self.q > 0:
+            eps_samples = self.trace.posterior['eps'].values  # shape - (chains, draws, len(y_diff) + q)
+            # use the error terms from the posterior samples, and calculate the mean to help match shapes
+            eps_post_mean = eps_samples.mean(axis=(0, 1))  # shape - (len(y_diff) + q,)
+
+            ma_terms = list(eps_post_mean[-self.q:])    # get the last q error terms
+        else:
+            ma_terms = []
         
         # since multi-dimensional, dot products can be used to do lienar combinations of weights with AR, MA terms
         for step in range(steps):
@@ -135,6 +145,8 @@ class BayesianARIMA:
         # series data 
         forecast_series = pd.Series(forecast, name='Forecast')
         return forecast_series
+    
+    
     
     def save(self) -> str:
         """
