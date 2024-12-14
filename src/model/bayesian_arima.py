@@ -1,10 +1,10 @@
-# Bayesian code inspired off math described in: https://www.columbia.edu/~mh2078/MachineLearningORFE/MCMC_Bayes.pdf
+# Bayesian code inspired off math described in: hptps://www.columbia.edu/~mh2078/MachineLearningORFE/MCMC_Bayes.pdf
 
 import pymc as pm
 import numpy as np
 import pandas as pd
 from typing import Optional
-import aesara.tensor as tt
+import pytensor.tensor as pt
 
 import pickle
 from typing import Tuple
@@ -54,16 +54,16 @@ class BayesianARIMA:
             
             # prior for the noise - half normal to keep positive
             sigma = pm.HalfNormal('sigma', sigma=1)
-            
+
             # Initialize mu to zeros with shape (N-p,)
-            mu = tt.zeros(len(y_diff) - self.p)
-            
+            mu = pt.zeros(len(y_diff) - self.p)
+
             # Use summations to sum up AR, MA, and error terms (and exog if exists)
 
             # AR component
             for i in range(1, self.p + 1):
                 mu += phi[i - 1] * y_diff[self.p - i : -i] 
-            
+
             # MA component
             if self.q > 0:
                 #  latent error terms

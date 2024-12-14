@@ -1,5 +1,5 @@
-from bayesian_arima import BayesianARIMA
-from model_selection import determine_arima_order
+from .bayesian_arima import BayesianARIMA
+from .model_selection import determine_arima_order
 import pandas as pd
 from typing import Dict
 
