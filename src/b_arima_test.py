@@ -7,21 +7,19 @@ import matplotlib.pyplot as plt
 from statsmodels.tsa.stattools import adfuller
 from model import BayesianARIMA, determine_arima_order
 
-# Step 1: Fetch historical data for Apple Inc.
+# historical data for Apple Inc.
 ticker = 'AAPL'
 start_date = '2015-01-01'
 end_date = '2023-12-31'
 data = yf.download(ticker, start=start_date, end=end_date, interval='1d')
 
-# Step 2: Select the target variable
+# target variable
 y = data['Close']
 
-# Step 3: Select exogenous variables (optional)
-
-# Step 4: Handle missing values
+# handle missing values
 y = y.dropna()
 
-# Step 5: Plot the original series
+# plot the original series
 plt.figure(figsize=(12, 6))
 plt.plot(y, label='Adjusted Close Price')
 plt.title(f'{ticker} Adjusted Close Price')
@@ -30,7 +28,7 @@ plt.ylabel('Price')
 plt.legend()
 plt.show()
 
-# Step 6: Test for stationarity using the Augmented Dickey-Fuller test
+# stationarity tests using the Augmented Dickey-Fuller test
 def test_stationarity(timeseries):
     """
     Performs the Augmented Dickey-Fuller test to check stationarity.
@@ -56,27 +54,32 @@ def test_stationarity(timeseries):
 # Apply stationarity test
 test_stationarity(y)
 
-# Step 7: Determine the optimal ARIMA order
-order = determine_arima_order(y, max_p=5, max_d=2, max_q=5, seasonal=False, m=1)
+# optimal ARIMA order
+order = determine_arima_order(y, max_p=20, max_d=20, max_q=20, seasonal=False, m=1)
 print(f"Optimal ARIMA order for {ticker}: {order}")
 
 
-# Step 9: Initialize and train the Bayesian ARIMA model
+# initialize and train the Bayesian ARIMA model
 p, d, q = order
 bayesian_arima = BayesianARIMA(name="AAPL", p=p, d=d, q=q, seasonal=False, m=1)
 
-# Train the model
-bayesian_arima.train(y=y)
+# train the model
+bayesian_arima.train(y=y, draws=100, tune=100, target_accept=0.75)
 
-# Step 10: Prepare for forecasting
-# Differenced target series
+try:
+    bayesian_arima.save()
+    print("Model saved successfully.")
+except Exception as e:
+    print(f"Error saving model: {e}")
+
+# prepare for forecasting
+# differenced target series
 y_diff = y.diff(d).dropna().values
 
-# Extract the last 'p' observations from the differenced series
+# get the last 'p' observations from the differenced series
 last_observations = y_diff[-p:]
 
-# Define the number of steps to forecast
-steps = 5  # Forecasting the next 5 days
+steps = 5  # forecasting the next 5 days
 
 # Generate forecasts
 forecasts_diff = bayesian_arima.predict(steps=steps, last_observations=last_observations)
@@ -92,17 +95,16 @@ for diff in forecasts_diff:
     current_value += diff
     forecast_values.append(current_value)
 
-# Create forecast dates
+# forecast dates
 last_date = y.index[-1]
 forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=steps, freq='B')  # 'B' for business days
 
-# Create forecast series
 forecast_series = pd.Series(forecast_values, index=forecast_dates, name='Forecast')
 
 print("Forecasted Adjusted Close Prices:")
 print(forecast_series)
 
-# Plot the forecasts alongside historical data
+# plot the forecasts alongside historical data
 plt.figure(figsize=(12, 6))
 plt.plot(y, label='Historical')
 plt.plot(forecast_series, label='Forecast', marker='o')

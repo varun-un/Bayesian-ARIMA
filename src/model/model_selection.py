@@ -12,8 +12,8 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, seasonal=True, m=1)
     # pmdarima call
     model = pmdarima.auto_arima(
         series,
-        start_p=0,
-        start_q=0,
+        start_p=1,
+        start_q=1,
         max_p=max_p,
         max_q=max_q,
         max_d=max_d,
@@ -22,7 +22,8 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, seasonal=True, m=1)
         trace=True,
         error_action='ignore',
         suppress_warnings=True,
-        stepwise=True
+        stepwise=False,
+        maxiter=100,
     )
     return model.order
 

@@ -33,12 +33,18 @@ class BayesianARIMA:
         self.model = None
         self.trace = None
 
-    def train(self, y: pd.Series):
+    def train(self, y: pd.Series, draws: int = 1000, tune: int = 1000, target_accept: float = 0.95):
         """
         Train the Bayesian ARIMA model using PyMC3.
         
         Samples from the posterior distribution using MCMC.
         Builds Bayesian model around each AR and MA parameter
+
+        Parameters:
+        - y: Time series data.
+        - draws: Number of samples to draw (pymc sampler for MCMC).
+        - tune: Number of tuning steps to tune the sampler.
+        - target_accept: Target acceptance rate for the sampler.
         """
         # Differencing
         y_diff = y.diff(self.d).dropna().values
@@ -77,7 +83,7 @@ class BayesianARIMA:
             y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y_diff[self.p:])
             
             # Sampling - PyMC3 uses Hamiltonian Monte Carlo (MCMC) for sampling
-            self.trace = pm.sample(draws=1000, tune=1000, target_accept=0.95, return_inferencedata=True)
+            self.trace = pm.sample(draws=draws, tune=tune, target_accept=target_accept, return_inferencedata=True)
 
     def predict(self, steps: int, last_observations: Optional[np.ndarray] = None) -> pd.Series:
         """
