@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 class BayesianARIMA:
-    def __init__(self, name: str, p: int, d: int, q: int, seasonal: bool = False, m: int = 1):
+    def __init__(self, name: str, p: int, d: int, q: int):
         """
         Initialize Bayesian ARIMA with specified order.
         
@@ -22,14 +22,10 @@ class BayesianARIMA:
         - p: Number of autoregressive terms.
         - d: Number of nonseasonal differences.
         - q: Number of moving average terms.
-        - seasonal: Whether to include seasonal components.
-        - m: Seasonal period.
         """
         self.p = p
         self.d = d
         self.q = q
-        self.seasonal = seasonal
-        self.m = m
         self.model = None
         self.trace = None
 

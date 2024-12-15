@@ -10,16 +10,13 @@ from pathlib import Path
 
 
 class BayesianSARIMA:
-    def __init__(self, name: str, p: int, d: int, q: int, 
-                 seasonal: bool = False, m: int = 1, 
-                 P: int = 0, D: int = 0, Q: int = 0):
+    def __init__(self, name: str, p: int, d: int, q: int, m: int = 1, P: int = 0, D: int = 0, Q: int = 0):
         """
         Initialize Bayesian SARIMA with specified order.
         
         Parameters:
         - name: Name of the model for saving/loading.
         - p, d, q: Non-seasonal ARIMA orders.
-        - seasonal: Boolean indicating if seasonality is included.
         - m: Seasonal period.
         - P, D, Q: Seasonal ARIMA orders.
         """
@@ -27,7 +24,7 @@ class BayesianSARIMA:
         self.p = p
         self.d = d
         self.q = q
-        self.seasonal = seasonal
+        self.seasonal = (m > 1)
         self.m = m
         self.P = P
         self.D = D
@@ -166,7 +163,7 @@ class BayesianSARIMA:
             # Sampling - PyMC3 uses Hamiltonian Monte Carlo (MCMC) for sampling
             self.trace = pm.sample(draws=draws, tune=tune, target_accept=target_accept, return_inferencedata=True)
 
-    def predict(self, steps: int, last_observations: Optional[np.ndarray] = None) -> pd.Series:
+    def predict(self, steps: int, last_observations: Optional[np.ndarray] = None, noise_scale: float = 0.1) -> pd.Series:
         """
         Generate forecasts using the posterior samples.
 
@@ -178,6 +175,7 @@ class BayesianSARIMA:
         Parameters:
         - steps: Number of future steps to predict.
         - last_observations: Last max(p, P*m) observations from the differenced series.
+        - noise_scale: Scale factor for the noise. Default is 0.1. A factor of 0 will make the model deterministic.
 
         Returns:
         - pd.Series: Forecasted values.
@@ -270,10 +268,10 @@ class BayesianSARIMA:
                     ma_component += THETA_post[J - 1] * ma_terms[-J*self.m]
 
             # sample noise - may change in the future to be deterministic but models random sampling of Bayesian model anyways
-            epsilon = np.random.normal(0, sigma_post)
+            epsilon = np.random.normal(0, sigma_post) * noise_scale         # scale down the noise, otherwise it tends to dominate (increase determinism)
 
             # sum components
-            y_hat_diff = ar_component + sar_component + ma_component + epsilon
+            y_hat_diff = ar_component + sar_component + ma_component
             forecast.append(y_hat_diff)
 
             # update states
@@ -313,7 +311,7 @@ class BayesianSARIMA:
         - filename: Path to the saved model. If None, uses the default naming convention.
         """
         if filename is None:
-            filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
+            filename = Path(__file__).parent.parent.parent / f"models/arima/{self.name}.pkl"
 
         with open(filename, 'rb') as f:
             data = dill.load(f)
