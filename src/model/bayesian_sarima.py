@@ -135,10 +135,8 @@ class BayesianSARIMA:
                     sar_sum = pm.math.sum(sar_contributions, axis=0)
                     mu += sar_sum
 
-            # MA terms
-            # latent error terms
-            # We pad by q (and seasonal Q*m if needed) to avoid indexing errors
-            # Let's pad with q + Q*m to handle both nonseasonal and seasonal
+            # MA terms - latent error (epsilons)
+            # Extend the q padding seasonal Q*m to avoid indexing errors and for seasonal
             pad = self.q + (self.Q * self.m if self.seasonal else 0)
             eps = pm.Normal('eps', mu=0, sigma=sigma, shape=N + pad)
 
@@ -151,21 +149,20 @@ class BayesianSARIMA:
                 ma_sum = pm.math.sum(ma_contributions, axis=0)
                 mu += ma_sum
 
-            # Seasonal MA component
-            # for J in [1, Q], mu_t += THETA_J * eps_{t - J*m}
+            # seasonal MA component
+            # for j in [1, Q], mu_t += THETA_j * eps_{t - j*m}
             if self.seasonal and self.Q > 0 and self.m > 1:
                 sma_contributions = []
-                for J in range(1, self.Q + 1):
-                    sma_contributions.append(THETA[J - 1] * eps[start_index + pad - J*self.m : -J*self.m])
+                for j in range(1, self.Q + 1):
+                    sma_contributions.append(THETA[j - 1] * eps[start_index + pad - j*self.m : -j*self.m])
                 if sma_contributions:
                     sma_sum = pm.math.sum(sma_contributions, axis=0)
                     mu += sma_sum
 
-            # Likelihood
-            # y_obs for the differenced series from start_index onward
+            # likelihood of observations on the differenced series - Bayesian update step
             y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y_diff[start_index:])
 
-            # Sampling from the Posterior
+            # Sampling - PyMC3 uses Hamiltonian Monte Carlo (MCMC) for sampling
             self.trace = pm.sample(draws=draws, tune=tune, target_accept=target_accept, return_inferencedata=True)
 
     def predict(self, steps: int, last_observations: Optional[np.ndarray] = None) -> pd.Series:
@@ -187,6 +184,7 @@ class BayesianSARIMA:
         if self.trace is None:
             raise ValueError("Model has not been trained yet.")
 
+        # same as arima - take from posterior distribution
         phi_post = self.trace.posterior['phi'].mean(dim=['chain', 'draw']).values
         theta_post = self.trace.posterior['theta'].mean(dim=['chain', 'draw']).values
         sigma_post = self.trace.posterior['sigma'].mean(dim=['chain', 'draw']).values
@@ -201,22 +199,21 @@ class BayesianSARIMA:
         else:
             THETA_post = None
 
-        # Determine the required length of last_observations
-        # We need at least max(p, P*m) observations to forecast
+        # need at least max(p, P*m) prev observations to forecast
         req_length = max(self.p, self.P * self.m if (self.seasonal and self.m > 1) else 0)
         if last_observations is None or len(last_observations) < req_length:
             raise ValueError(f"Must provide at least {req_length} observations for forecasting.")
 
-        # If needed, pad last_observations
+        # gonna pad last obs to meet the required
         if len(last_observations) > req_length:
             last_observations = last_observations[-req_length:]
 
-        # Extract posterior eps to initialize MA terms
-        # If q or Q > 0, we have eps
+        # Extract posterior eps to initialize MA terms - if q or Q is nonzero
         q_total = self.q + (self.Q * self.m if self.seasonal else 0)
         if q_total > 0:
             eps_samples = self.trace.posterior['eps'].values
             eps_mean = eps_samples.mean(axis=(0, 1))
+
             # Initialize MA terms from last q_total eps
             ma_terms = list(eps_mean[-q_total:])
         else:
@@ -227,38 +224,35 @@ class BayesianSARIMA:
         # For seasonal AR: we need P*m differenced values
         # last_observations now contains max(p, P*m) values
 
-        # We'll forecast differenced values (y_hat_diff), then integrate back if needed
+        # forecast the differenced series
 
-        # Setup forecasting arrays
         forecast = []
 
-        # We'll treat last_observations as AR/seasonal AR terms
-        # Nonseasonal AR terms:
+        # treat last_observations as AR/seasonal AR terms
+        # nonseasonal AR terms:
         ar_terms = list(last_observations[-self.p:]) if self.p > 0 else []
 
-        # Seasonal AR terms:
+        # seasonal AR terms:
         if self.seasonal and self.P > 0 and self.m > 1:
-            # Extract seasonal AR terms
+            # extract seasonal AR terms
             sar_terms = list(last_observations[-self.P*self.m:])
         else:
             sar_terms = []
 
-        # Similarly for MA terms:
-        # We already have ma_terms initialized
-
         for step in range(steps):
-            # Compute AR component
+            # compute AR component
             ar_component = 0
             if self.p > 0:
                 ar_component = np.dot(phi_post, ar_terms[-self.p:])
 
-            # Seasonal AR component
+            # seasonal AR component
             sar_component = 0
             if self.seasonal and self.P > 0 and self.m > 1:
-                # For each seasonal AR coefficient PHI_post[i], multiply by y_{t - (i+1)*m}
-                # Collect seasonal lags from sar_terms
+
+                # for each seasonal AR coefficient PHI_post[i], multiply by y_{t - (i+1)*m}
+
                 # sar_terms stores last P*m observations
-                # For each I in [1,P], we take sar_terms[-I*m]
+                # for each I in [1,P], we take sar_terms[-I*m]
                 for I in range(1, self.P + 1):
                     sar_component += PHI_post[I - 1] * sar_terms[-I*self.m]
 
@@ -266,19 +260,22 @@ class BayesianSARIMA:
             ma_component = 0
             if self.q > 0:
                 ma_component += np.dot(theta_post, ma_terms[-self.q:])
-            # Seasonal MA component
+
+            # seasonal MA component
             if self.seasonal and self.Q > 0 and self.m > 1:
+
+                # similar logic to AR above
                 for J in range(1, self.Q + 1):
                     ma_component += THETA_post[J - 1] * ma_terms[-J*self.m]
 
-            # Sample noise
+            # sample noise - may change in the future to be deterministic but models random sampling of Bayesian model anyways
             epsilon = np.random.normal(0, sigma_post)
 
-            # sum components for total differenced forecast
+            # sum components
             y_hat_diff = ar_component + sar_component + ma_component + epsilon
             forecast.append(y_hat_diff)
 
-            # Update states
+            # update states
             if self.p > 0:
                 ar_terms.append(y_hat_diff)
             if self.seasonal and self.P > 0 and self.m > 1:
@@ -286,7 +283,7 @@ class BayesianSARIMA:
             if q_total > 0:
                 ma_terms.append(epsilon)
 
-        # Convert forecast to pd.Series
+        # to pd.Series
         forecast_series = pd.Series(forecast, name='Forecast')
         return forecast_series
 
