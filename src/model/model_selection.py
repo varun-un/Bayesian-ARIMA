@@ -48,9 +48,9 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, m=1):
         trace=True,
         error_action='ignore',
         suppress_warnings=True,
-        stepwise=True,
+        stepwise=False,             # False => grid search, True => opt loop
         maxiter=200,
-        max_order=6,
+        max_order=None,
         information_criterion='aic',     # better at future predictions than 'bic'
     )
     p, d, q = model.order

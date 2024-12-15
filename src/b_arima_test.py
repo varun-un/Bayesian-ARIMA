@@ -4,7 +4,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from model import BayesianARIMA, determine_arima_order, adf_test
+from model import BayesianARIMA, determine_arima_order, adf_test, BayesianSARIMA
 
 # historical data for Apple Inc.
 ticker = 'AAPL'
@@ -33,18 +33,19 @@ stationary = adf_test(y, verbose=True)
 
 # optimal ARIMA order
 if not stationary:
-    order = determine_arima_order(y, max_p=10, max_d=10, max_q=10, m=1)
+    # order = determine_arima_order(y, max_p=10, max_d=10, max_q=10, m=1)
+    order = (5, 1, 1)       # example order for testing
 else:
-    order = determine_arima_order(y, max_p=10, max_d=1, max_q=10, m=1)
+    order = determine_arima_order(y, max_p=10, max_d=0, max_q=10, m=1)
 print(f"Optimal ARIMA order for {ticker}: {order}")
 
 
 # initialize and train the Bayesian ARIMA model
 p, d, q = order
-bayesian_arima = BayesianARIMA(name="AAPL", p=p, d=d, q=q, seasonal=False, m=1)
+bayesian_arima = BayesianSARIMA(name="AAPL", p=p, d=d, q=q, seasonal=False, m=2, P=1, D=1, Q=1)
 
 # train the model
-bayesian_arima.train(y=y, draws=10, tune=10, target_accept=0.75)
+bayesian_arima.train(y=y, draws=2, tune=2, target_accept=0.75)
 
 try:
     bayesian_arima.save()
@@ -89,6 +90,7 @@ plt.figure(figsize=(12, 6))
 plt.plot(y, label='Historical')
 plt.plot(forecast_series, label='Forecast', marker='o')
 plt.title(f'{ticker} Adjusted Close Price Forecast')
+plt.xlim(y.index[-20], forecast_dates[-1])              # zoom in on last 20 days
 plt.xlabel('Date')
 plt.ylabel('Price')
 plt.legend()
