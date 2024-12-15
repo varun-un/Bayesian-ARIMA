@@ -1,14 +1,14 @@
-from .bayesian_arima import BayesianARIMA
-from .model_selection import determine_arima_order
+from .bayesian_sarima import BayesianSARIMA
+from .model_selection import determine_sarima_order
+import yfinance as yf
 import pandas as pd
 from typing import Dict
 
 class HierarchicalModel:
     """
-    This class represents one ticker, which will have 4 ARIMA models.
+    This class represents one ticker, which will have 3 ARIMA models.
     Each model has different timeframes and seasonality. The range of data available with the yfinance api is 
     also different for each interval.
-    - Monthly: Interval = 30 days, Seasonality = 12
     - Daily: Interval = 1 day, Seasonality = 5, Range = 20 years
         * https://www.investopedia.com/terms/w/weekendeffect.asp#:~:text=Key%20Takeaways,of%20the%20immediately%20preceding%20Friday.
         * https://www.researchgate.net/publication/225399137_The_day_of_the_week_effect_on_stock_market_volatility
@@ -18,89 +18,61 @@ class HierarchicalModel:
     """
 
 
-    def __init__(self):
+    def __init__(self, ticker: str):
         """
         Initializes the HierarchicalModel with empty models and seasonality values.
         """
-        # dict of BayesianARIMA models for each timeframe
+
+        self.ticker = ticker
+        # dict of BayesianSARIMA models for each timeframe
         self.models = {
-            'monthly': None,
             'daily': None,
             'hourly': None,
             'minute': None
         }
         self.seasonality = {
-            'monthly': 12,
             'daily': 5,
             'hourly': 6,
             'minute': 1
         }
         self.interval = {
-            'monthly': '1mo',
             'daily': '1d',
             'hourly': '1h',
             'minute': '1m'
         }
         self.range = {
-            'monthly': '20y',
             'daily': '20y',
             'hourly': '2y',
             'minute': '1mo'
         }
 
 
-    def add_model(self, timeframe: str, model: BayesianARIMA):
+    def create_models(self):
         """
-        Add a Bayesian ARIMA model for a specific timeframe. (usually an internal method)
+        Create the BayesianSARIMA models for each timeframe.
+
         """
-        if timeframe not in self.models:
-            raise ValueError("Invalid timeframe. Choose from 'monthly', 'daily', 'hourly', 'minute'.")
-        self.models[timeframe] = model
+        for timeframe, seasonality in self.seasonality.items():
 
-    def train_all(self, data: Dict[str, pd.Series], exog: Dict[str, pd.Series], sampler):
+            order = determine_sarima_order(ticker=self.ticker, max_p=10, max_d=4, max_q=10, m=seasonality, max_P=5, max_D=2, max_Q=5)   
+            p, d, q, P, D, Q = order
+
+            self.models[timeframe] = BayesianSARIMA(name=f"{self.ticker}_{timeframe}", m=seasonality, p=p, d=d, q=q, P=P, D=D, Q=Q)
+
+    def train_models(self):
         """
-        Train all ARIMA models using the provided data and sampler. The exogenous variables are optional.
-        This will also create and add models for all time intervals.
+        Train the BayesianSARIMA models for each timeframe.
 
-        Parameters:
-        - data: Dictionary of timeframes to series. The keys should be 'monthly', 'daily', 'hourly', 
-                'minute', and the values should be pandas Series.
-        - exog: Dictionary of timeframes to exogenous variables. The keys should be 'monthly', 'daily', 
-                'hourly', 'minute', and the values should be pandas Series. If no exogenous variables, 
-                set to `None`.
-        - sampler: A sampler object to provide training data
+        Trains it by default on the max range of data available for each timeframe.
+
         """
-        for timeframe, series in data.items():
-            sampled_series = sampler.sample(series)
-            if exog is None:
-                sampled_exog = None
-            else:
-                sampled_exog = exog.get(timeframe, None)
-
-            # get seasonality and ARIMA order
-            seasonality = self.seasonality[timeframe]
-            p, d, q = determine_arima_order(sampled_series, seasonal=(seasonality > 1), m=seasonality)
-            
-            # create and train the models
-            model = BayesianARIMA(p, d, q)
-            model.train(sampled_series, sampled_exog)
-            self.add_model(timeframe, model)
-
-    def predict_all(self, steps: int) -> Dict[str, pd.Series]:
-        """
-        Generate forecasts from all models. Forward passes through the ARIMA models
-
-        Parameters:
-        - steps: Number of steps to forecast into the future.
-
-        Returns:
-        - dict: Dictionary of timeframes to forecasted series. Keys are 'monthly', 'daily', 'hourly', 'minute'.
-                Values are pandas series of forecasted values and length `steps`.
-        """
-        forecasts = {}
+        
         for timeframe, model in self.models.items():
-            forecasts[timeframe] = model.predict(steps)
-        return forecasts
+            data = yf.download(self.ticker, interval=self.interval[timeframe], period=self.range[timeframe])
+            y = data['Close']
+            y = y.dropna()
+            model.train(y, draws=1000, tune=1000, target_accept=0.95)
+
     
     def predict_to_time(self, delta_t: pd.Timedelta) -> Dict[str, float]:
         """
@@ -110,17 +82,15 @@ class HierarchicalModel:
         - delta_t: The time into the future to forecast to.
 
         Returns:
-        - dict: Dictionary of values predicted at the specific time in the future. Keys are 'monthly', 'daily', 'hourly', 'minute'.
+        - dict: Dictionary of values predicted at the specific time in the future. Keys are 'daily', 'hourly', 'minute'.
                 Values are the value at the specific time in the future. Linear interpolation is used for delta_t not divisible by the interval.
         """
         # number of steps to take based on interval
-        delta_t_minutes = delta_t.total_seconds() / 60
         delta_t_hours = delta_t.total_seconds() / 3600
         delta_t_days = delta_t.total_seconds() / (3600 * 24)
-        delta_t_months = delta_t.days / 30
+        delta_t_minutes = delta_t.total_seconds() / 60
 
         deltas = {
-            'monthly': delta_t_months,
             'daily': delta_t_days,
             'hourly': delta_t_hours,
             'minute': delta_t_minutes
@@ -164,17 +134,15 @@ class HierarchicalModel:
         - delta_t: The time into the future to forecast to.
 
         Returns:
-        - dict: Dictionary of time-labelled forecasts. Keys are 'monthly', 'daily', 'hourly', 'minute'.
+        - dict: Dictionary of time-labelled forecasts. Keys are 'daily', 'hourly', 'minute'.
                 Values are pandas series of forecasted values with time labels.
         """
         # number of steps to take based on interval
         delta_t_minutes = delta_t.total_seconds() / 60
         delta_t_hours = delta_t.total_seconds() / 3600
         delta_t_days = delta_t.total_seconds() / (3600 * 24)
-        delta_t_months = delta_t.days / 30
 
         deltas = {
-            'monthly': delta_t_months,
             'daily': delta_t_days,
             'hourly': delta_t_hours,
             'minute': delta_t_minutes

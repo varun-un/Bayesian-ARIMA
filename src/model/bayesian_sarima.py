@@ -296,7 +296,7 @@ class BayesianSARIMA:
         if self.model is None:
             raise ValueError("Model has not been trained yet.")
         
-        filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
+        filename = Path(__file__).parent.parent.parent / f"models/arima/{self.name}.pkl"
         
         with open(filename, "wb") as f:
             dill.dump({'model': self.model, 'trace': self.trace}, f)

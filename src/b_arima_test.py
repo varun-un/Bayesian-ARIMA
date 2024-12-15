@@ -48,8 +48,8 @@ bayesian_arima = BayesianSARIMA(name="AAPL", p=p, d=d, q=q, m=2, P=P, D=D, Q=Q)
 bayesian_arima.train(y=y, draws=2, tune=2, target_accept=0.75)
 
 try:
-    bayesian_arima.save()
-    print("Model saved successfully.")
+    mmmm= bayesian_arima.save()
+    print("Model saved successfully", mmmm)
 except Exception as e:
     print(f"Error saving model: {e}")
 
