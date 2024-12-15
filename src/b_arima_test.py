@@ -4,8 +4,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from statsmodels.tsa.stattools import adfuller
-from model import BayesianARIMA, determine_arima_order
+from model import BayesianARIMA, determine_arima_order, adf_test
 
 # historical data for Apple Inc.
 ticker = 'AAPL'
@@ -28,34 +27,15 @@ plt.ylabel('Price')
 plt.legend()
 plt.show()
 
-# stationarity tests using the Augmented Dickey-Fuller test
-def test_stationarity(timeseries):
-    """
-    Performs the Augmented Dickey-Fuller test to check stationarity.
-    
-    Parameters:
-    - timeseries (pd.Series): The time series data.
-    
-    Returns:
-    - None
-    """
-    print('Results of Augmented Dickey-Fuller Test:')
-    result = adfuller(timeseries)
-    labels = ['ADF Statistic', 'p-value', '#Lags Used', 'Number of Observations Used']
-    for value, label in zip(result[:4], labels):
-        print(f'{label}: {value}')
-    for key, value in result[4].items():
-        print(f'Critical Value ({key}): {value}')
-    if result[1] < 0.05:
-        print("Conclusion: The series is stationary.")
-    else:
-        print("Conclusion: The series is non-stationary.")
+# use augmented Dickey-Fuller test to check for stationarity
+stationary = adf_test(y, verbose=True)
 
-# Apply stationarity test
-test_stationarity(y)
 
 # optimal ARIMA order
-order = determine_arima_order(y, max_p=20, max_d=20, max_q=20, seasonal=False, m=1)
+if not stationary:
+    order = determine_arima_order(y, max_p=10, max_d=10, max_q=10, m=1)
+else:
+    order = determine_arima_order(y, max_p=10, max_d=1, max_q=10, m=1)
 print(f"Optimal ARIMA order for {ticker}: {order}")
 
 
@@ -64,7 +44,7 @@ p, d, q = order
 bayesian_arima = BayesianARIMA(name="AAPL", p=p, d=d, q=q, seasonal=False, m=1)
 
 # train the model
-bayesian_arima.train(y=y, draws=100, tune=100, target_accept=0.75)
+bayesian_arima.train(y=y, draws=10, tune=10, target_accept=0.75)
 
 try:
     bayesian_arima.save()

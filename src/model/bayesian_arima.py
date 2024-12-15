@@ -33,6 +33,8 @@ class BayesianARIMA:
         self.model = None
         self.trace = None
 
+        self.name = name
+
     def train(self, y: pd.Series, draws: int = 1000, tune: int = 1000, target_accept: float = 0.95):
         """
         Train the Bayesian ARIMA model using PyMC3.
