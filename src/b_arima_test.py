@@ -4,7 +4,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from model import BayesianARIMA, determine_arima_order, adf_test, BayesianSARIMA
+from model import BayesianARIMA, determine_arima_order, adf_test, BayesianSARIMA, determine_sarima_order
 
 # historical data for Apple Inc.
 ticker = 'AAPL'
@@ -33,15 +33,15 @@ stationary = adf_test(y, verbose=True)
 
 # optimal ARIMA order
 if not stationary:
-    # order = determine_arima_order(y, max_p=10, max_d=10, max_q=10, m=1)
-    order = (5, 1, 1)       # example order for testing
+    # order = determine_sarima_order(y, max_p=10, max_d=10, max_q=10, m=2)
+    order = (5, 1, 1, 1, 1, 2)       # example order for testing
 else:
-    order = determine_arima_order(y, max_p=10, max_d=0, max_q=10, m=1)
+    order = determine_sarima_order(y, max_p=10, max_d=0, max_q=10, m=2)
 print(f"Optimal ARIMA order for {ticker}: {order}")
 
 
 # initialize and train the Bayesian ARIMA model
-p, d, q = order
+p, d, q, P, D, Q = order
 bayesian_arima = BayesianSARIMA(name="AAPL", p=p, d=d, q=q, seasonal=False, m=2, P=1, D=1, Q=1)
 
 # train the model

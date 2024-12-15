@@ -7,7 +7,7 @@ from typing import Optional
 import pytensor.tensor as pt
 
 import pickle
-from typing import Tuple
+import dill
 from pathlib import Path
 
 
@@ -169,7 +169,7 @@ class BayesianARIMA:
         filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
         
         with open(filename, "wb") as f:
-            pickle.dump({'model': self.model, 'trace': self.trace}, f)
+            dill.dump({'model': self.model, 'trace': self.trace}, f)
         
         return filename
     
@@ -185,6 +185,6 @@ class BayesianARIMA:
             filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
 
         with open(filename, 'rb') as f:
-            data = pickle.load(f)
+            data = dill.load(f)
             self.model = data['model']
             self.trace = data['trace']

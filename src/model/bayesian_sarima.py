@@ -4,6 +4,7 @@ import pandas as pd
 from typing import Optional
 import pytensor.tensor as pt
 import pickle
+import dill
 from typing import Tuple
 from pathlib import Path
 
@@ -22,7 +23,7 @@ class BayesianSARIMA:
         - m: Seasonal period.
         - P, D, Q: Seasonal ARIMA orders.
         """
-        self.name = name
+        self.name = f"{name}-{p}-{d}-{q}-{P}-{D}-{Q}"
         self.p = p
         self.d = d
         self.q = q
@@ -300,7 +301,7 @@ class BayesianSARIMA:
         filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
         
         with open(filename, "wb") as f:
-            pickle.dump({'model': self.model, 'trace': self.trace}, f)
+            dill.dump({'model': self.model, 'trace': self.trace}, f)
         
         return filename
     
@@ -315,6 +316,6 @@ class BayesianSARIMA:
             filename = Path(__file__).parent / f"../../models/arima/{self.name}.pkl"
 
         with open(filename, 'rb') as f:
-            data = pickle.load(f)
+            data = dill.load(f)
             self.model = data['model']
             self.trace = data['trace']

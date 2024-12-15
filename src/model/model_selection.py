@@ -60,6 +60,55 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, m=1):
 
     return p, d, q
 
+def determine_sarima_order(series, max_p=5, max_d=2, max_q=5, m=1, max_P=2, max_D=1, max_Q=2):
+    """
+    Determines the optimal SARIMA order (p, d, q, P, D, Q) for a stock's data
+
+    Same as determine_arima_order, but more options for seasonal data
+
+    Returns a tuple of p, d, q, P, D, Q SARIMA order for this ticker
+    """
+
+    seasonality = (m != 1)
+
+    # pmdarima call
+    model = pmdarima.auto_arima(
+        series,
+        start_p=5,
+        start_q=5,
+        max_p=max_p,
+        max_q=max_q,
+        max_d=max_d,
+        seasonal=seasonality,
+        m=m,
+        start_P=1,
+        start_Q=1,
+        max_P=max_P,
+        max_Q=max_Q,
+        max_D=max_D,
+        trace=True,
+        error_action='ignore',
+        suppress_warnings=True,
+        stepwise=False,             # False => grid search, True => opt loop
+        maxiter=500,                # more iterations for seasonal
+        max_order=None,
+        information_criterion='aic',     # better at future predictions than 'bic'
+    )
+    p, d, q = model.order
+    P, D, Q, _ = model.seasonal_order
+
+    p = max(p, 1)       # p must be at least 1
+    q = max(q, 1)       # q must be at least 1
+
+    # if we're doing seasonal, make sure P and Q are at least 1
+    if seasonality:
+        P = max(P, 1)
+        Q = max(Q, 1)
+    else:
+        P, D, Q = 0, 0, 0
+
+    return p, d, q, P, D, Q
+
 if __name__ == "__main__":
 
     from ..utils.preprocessor import load_data
