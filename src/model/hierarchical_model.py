@@ -4,6 +4,10 @@ from src.utils import invert_differencing, fetch_all_data, TradingTimeDelta
 import yfinance as yf
 import pandas as pd
 from typing import Dict, Tuple
+import pickle
+import dill
+from pathlib import Path
+from src.ensemble import Ensemble
 
 class HierarchicalModel:
     """
@@ -19,12 +23,17 @@ class HierarchicalModel:
     """
 
 
-    def __init__(self, ticker: str):
+    def __init__(self, ticker: str, ensemble: Ensemble = None):
         """
         Initializes the HierarchicalModel with empty models and seasonality values.
+
+        Parameters:
+        - ticker: str: The ticker symbol of the stock.
+        - ensemble: Ensemble: The ensemble method to use for combining the forecasts. Default is None.
         """
 
         self.ticker = ticker
+        self.ensemble = ensemble
         # dict of BayesianSARIMA models for each timeframe
         self.models = {
             'daily': None,
@@ -179,3 +188,23 @@ class HierarchicalModel:
 
         return predictions, labelled_forecasts
     
+    def save(self):
+        """
+        Save the hierarchical model to a file.
+        """
+        filename = Path(__file__).parent.parent.parent / f"models/hierarchical/{self.ticker}.pkl"
+
+        # save everything to a pickle file except the models
+        to_save = {
+            'ticker': self.ticker,
+            'seasonality': self.seasonality,
+            'interval': self.interval,
+            'range': self.range,
+            'fetch_range': self.fetch_range,
+            'pickled_models': self.pickled_models,
+            'ensemble': self.ensemble
+        }
+
+
+        with open(filename, 'wb') as f:
+            dill.dump(to_save, f)
