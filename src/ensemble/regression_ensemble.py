@@ -1,123 +1,84 @@
+from sklearn.linear_model import LinearRegression
 import numpy as np
+from typing import List
 import pandas as pd
-from typing import List, Optional
-from abc import ABC, abstractmethod
 from ..ensemble.ensemble import Ensemble
-
 
 class RegressionEnsemble(Ensemble):
     """
-    Online Ridge Regression Ensemble Method
-
-    Based off: https://www.ibm.com/topics/ridge-regression
-
-    Use ridge regression instead of lasso regression to avoid sparsity in the weights - want to consider all models.
+    Ensemble method using a regression model to combine multiple forecasts.
     """
 
-    def __init__(self, regularization: float = 1e-4):
+    def __init__(self):
         """
-        Initialize the Online RegressionEnsemble.
+        Initializes the RegressionEnsemble with a Linear Regression model.
+        """
+        self.model = LinearRegression()
+        self.is_trained = False
+
+    def train(self, forecasts: List[np.ndarray], actual: List[float], exog: List[np.ndarray] = None):
+        """
+        Train the regression model using the provided forecasts and actual values.
         
         Parameters:
-        - regularization (float): L2 regularization parameter to prevent overfitting (default=1e-4) 
+            forecasts (List[np.ndarray]): List of forecasted values from different models.
+            actual (List[float]): List of actual observed values.
+            exog (List[np.ndarray]): List of exogenous features, or data augmentation vectors. Optional.
         """
-        self.weights = None
-        self.regularization = regularization
+        if not forecasts:
+            raise ValueError("The 'forecasts' list is empty.")
         
-        # cumulative statistics for incremental learning
-        # storing these allows easy updates to weights using online algorithms
-        self.total_observations = 0
-        self.cumulative_XtX = None  # Σ (X^T * X)
-        self.cumulative_Xty = None  # Σ (X^T * y)
-    
-    def train(self, forecasts: List[float], actual: float):
+        n_models = len(forecasts)
+        n_samples = len(forecasts[0])
+
+        # make sure all forecast arrays have the same number of samples
+        for i, f in enumerate(forecasts):
+            if len(f) != n_samples:
+                raise ValueError(f"Forecast at index {i} has {len(f)} samples; expected {n_samples}.")
+
+        # Stack horizontally to form the feature matrix
+        X = np.column_stack(forecasts)  # Shape: (n_samples, n_models)
+
+        # tack on exogenous variables to feature mat
+        if exog is not None:
+            if len(exog) != n_samples:
+                raise ValueError(f"The number of exogenous samples ({len(exog)}) does not match the number of forecast samples, {n_samples}.")
+            # stack exogenous variables horizontally
+            exog_matrix = np.column_stack(exog)  # shape: (n_samples, n_exog_features)
+            X = np.hstack((X, exog_matrix))     # shape: (n_samples, n_models + n_exog_features)
+
+        y = np.array(actual)  # shape: (n_samples,)
+
+        # fit the regression model
+        self.model.fit(X, y)
+        self.is_trained = True
+        print("RegressionEnsemble: Training completed.")
+
+    def ensemble(self, forecasts: np.ndarray, exog: np.ndarray = None) -> float:
         """
-        Incrementally train the regression using online learning.
-        
-        Parameters:
-        - forecasts (List[float]): A list of prediction values from different models
-        - actual (float): The ground truth value for the current time step
-        """
-        # convert forecasts to a numpy array (feature vector)
-        X = np.array(forecasts).reshape(-1, 1) # shape: (num_models, 1)
-        y = actual  
-
-        # cumulative statistics
-        if self.cumulative_XtX is None:
-            self.cumulative_XtX = X @ X.T  # shape: (num_models, num_models)
-            self.cumulative_Xty = X.flatten() * y  # shape: (num_models,)
-        else:
-            self.cumulative_XtX += X @ X.T
-            self.cumulative_Xty += X.flatten() * y
-
-        self.total_observations += 1
-
-        # add L2 regularization to the diagonal of the XtX matrix - ridge regression
-        regularization_matrix = np.eye(X.shape[0]) * self.regularization
-
-        previous_weights = self.weights
-
-        try:
-            # weights = (XtX + lambda * I)^-1 * Xty     (from the paper/website)
-            XtX_reg = self.cumulative_XtX + regularization_matrix
-            self.weights = np.linalg.solve(XtX_reg, self.cumulative_Xty)
-            
-            # ensure weights are non-negative and normalize to sum to 1
-            self.weights = np.maximum(self.weights, 0)
-            weight_sum = np.sum(self.weights)
-            if weight_sum > 0:
-                self.weights /= weight_sum
-            else:
-                # if weights are 0, default to uniform weights
-                self.weights = np.ones(X.shape[0]) / X.shape[0]
-
-        except np.linalg.LinAlgError:
-            print("Error occurred with ridge regression, using previous weights.")
-            self.weights = previous_weights
-
-    def ensemble(self, forecasts: List[float]) -> float:
-        """
-        Combine forecasts using the learned optimal weights.
+        Combine forecasts using the trained regression model to produce a single prediction.
         
         Parameters:
-        - forecasts (List[float]): A list of prediction values from different models
+            forecasts (np.ndarray): Array of forecasted values from different models for a single sample.
+            exog (np.ndarray): Array of exogenous features for the single sample. Optional.
         
         Returns:
-        - float: The combined forecast using learned weights
+            float: The ensemble prediction.
         """
+        if not self.is_trained:
+            raise RuntimeError("RegressionEnsemble: The model has not been trained yet.")
 
-        if self.weights is None:
-            raise ValueError("Ensemble must be trained before making predictions.")
-        
-        # check that number of forecasts matches training
-        if len(forecasts) != len(self.weights):
-            raise ValueError("Number of forecasts must match number of models used during training.")
-        
-        # forecasts to a numpy array
-        X = np.array(forecasts)  # Shape: (num_models,)
-        
-        # weighted sum
-        ensemble_forecast = np.dot(self.weights, X)
-        
-        return ensemble_forecast
-    
-    def get_weights(self) -> np.ndarray:
-        """
-        Retrieve the learned weights for each model.
-        
-        Returns:
-        - np.ndarray: The learned weights for each model
-        """
-        if self.weights is None:
-            raise ValueError("Ensemble must be trained before accessing weights.")
-        return self.weights
-    
-    def reset(self):
-        """
-        Reset the ensemble to its initial state.
-        Useful for starting over or changing datasets completely.
-        """
-        self.weights = None
-        self.total_observations = 0
-        self.cumulative_XtX = None
-        self.cumulative_Xty = None
+        if forecasts.ndim != 1:
+            raise ValueError("RegressionEnsemble: 'forecasts' should be a 1D array.")
+
+        X_new = forecasts.reshape(1, -1)  # shape: (1, n_models)
+
+        if exog is not None:
+            if exog.ndim != 1:
+                raise ValueError("RegressionEnsemble: 'exog' should be a 1D array.")
+            exog_new = exog.reshape(1, -1)      # shape: (1, n_exog_features)
+            X_new = np.hstack((X_new, exog_new))  # combined Shape: (1, n_models + n_exog_features)
+
+        prediction = self.model.predict(X_new)
+
+        return prediction[0]
