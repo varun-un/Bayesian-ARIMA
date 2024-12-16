@@ -1,6 +1,6 @@
 import numpy as np
 from typing import List
-from ..ensemble.ensemble import Ensemble
+from src.ensemble import Ensemble
 
 class WeightedAverageEnsemble(Ensemble):
     """
@@ -50,3 +50,19 @@ class WeightedAverageEnsemble(Ensemble):
         weighted_avg = np.dot(forecasts, self.weights)
 
         return weighted_avg
+    
+    def set_weights(self, weights: List[float]):
+        """
+        Set the ensemble weights.
+        
+        Parameters:
+            weights (List[float]): List of weights for each forecasted model.
+                                   The length of weights should match the number of forecast models.
+        """
+        self.weights = np.array(weights)
+
+        if not np.all(np.isfinite(self.weights)):
+            raise ValueError("WeightedAverageEnsemble: All weights must be finite numbers.")
+
+        if not np.any(self.weights):
+            raise ValueError("WeightedAverageEnsemble: At least one weight must be non-zero.")

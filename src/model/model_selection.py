@@ -90,7 +90,7 @@ def determine_sarima_order(series, max_p=5, max_d=2, max_q=5, m=1, max_P=2, max_
         error_action='ignore',
         suppress_warnings=True,
         stepwise=False,             # False => grid search, True => opt loop
-        maxiter=400,                # more iterations for seasonal
+        maxiter=300,                # more iterations for seasonal
         max_order=None,
         information_criterion='aic',     # better at future predictions than 'bic'
     )

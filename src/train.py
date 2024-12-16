@@ -2,8 +2,9 @@ import argparse
 import sys
 from pathlib import Path
 import pandas as pd
-from .model import HierarchicalModel
-from .ensemble import WeightedAverageEnsemble
+
+from model import HierarchicalModel
+from ensemble import WeightedAverageEnsemble
 
 def main():
     parser = argparse.ArgumentParser(description='Train a HierarchicalModel for a given ticker.')
@@ -23,7 +24,7 @@ def main():
 
     WA = WeightedAverageEnsemble([0.3, 0.4, 0.3])
 
-    model = HierarchicalModel(ticker=ticker, ensemble=WA)
+    model = HierarchicalModel(ticker=ticker, ensemble=WA, memory_save=True)
     model.train_models(num_draws=num_draws, num_tune=num_tune, target_accept=target_accept)
     model.save()
 
@@ -32,4 +33,5 @@ def main():
 if __name__ == '__main__':
     main()
 
-    # python train.py AAPL --num_draws 500 --num_tune 200 --target_accept 0.9
+    # python3 train.py AAPL --num_draws 500 --num_tune 200 --target_accept 0.9
+    # python3 src/train.py AAPL --num_draws 2 --num_tune 2 --target_accept 0.9

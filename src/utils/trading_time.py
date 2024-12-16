@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from datetime import timedelta
+
 
 class TradingTimeDelta:
     """
@@ -142,6 +144,9 @@ class TradingTimeDelta:
         total_seconds, _ = self._calculate_trading_seconds()
         delta_days = total_seconds / (6.5 * 3600)  # 6.5 trading hours per day
         return delta_days
+    
+    def get_delta_seconds(self):
+        return self.get_delta_t(unit='seconds')
 
     def get_delta_t(self, unit='seconds'):
         """
@@ -171,6 +176,83 @@ class TradingTimeDelta:
             return total_seconds / (6.5 * 3600)
         else:
             raise ValueError("Unsupported unit. Choose from 'seconds', 'minutes', 'hours', 'days'.")
+        
+    @staticmethod
+    def get_next_trading_time(current_time: pd.Timestamp) -> pd.Timestamp:
+        """
+        Returns the next trading time after the given time.
+        
+        Parameters:
+            current_time (pd.Timestamp): The current time.
+        
+        Returns:
+            pd.Timestamp: The next trading time.
+        """
+        # check if current time is a trading day
+        if current_time.weekday() < 5:
+            # check if current time is after trading hours
+            if current_time.hour >= 16:
+                # find the next trading day at 9:30 AM
+                next_day = current_time + pd.Timedelta(days=1)
+                next_trading_time = pd.Timestamp(
+                    year=next_day.year, month=next_day.month, day=next_day.day,
+                    hour=9, minute=30
+                )
+            elif current_time.hour < 9.5:
+                # trading hours have not started yet
+                next_trading_time = pd.Timestamp(
+                    year=current_time.year, month=current_time.month, day=current_time.day,
+                    hour=9, minute=30
+                )
+            else:
+                next_trading_time = current_time
+
+        else:
+            # find next weekday at 9:30 AM
+            if current_time.weekday() == 5:  # Saturday
+                next_day = current_time + pd.Timedelta(days=2)
+            else:  # Sunday
+                next_day = current_time + pd.Timedelta(days=1)
+            next_trading_time = pd.Timestamp(
+                year=next_day.year, month=next_day.month, day=next_day.day,
+                hour=9, minute=30
+            )
+
+        return next_trading_time
+    
+    @staticmethod
+    def add_trading_time(ts: pd.Timestamp, increment: timedelta = timedelta(hours=1)) -> pd.Timestamp:
+        """
+        Add one increment of trading time. If increment goes past 16:00, move to next day 9:30.
+
+        Parameters:
+            ts (pd.Timestamp): The current timestamp.
+            increment (timedelta): The increment to add (default: 1 hour).
+        """
+        new_ts = ts + increment
+        trading_start = new_ts.replace(hour=9, minute=30, second=0, microsecond=0)
+        trading_end = new_ts.replace(hour=16, minute=0, second=0, microsecond=0)
+
+        # If new_ts goes beyond trading_end, jump to the next trading day 9:30
+        if new_ts > trading_end:
+            # Move to next valid trading day at 9:30
+            return TradingTimeDelta.get_next_trading_time(new_ts)
+        # if the increment crosses into weekend, fix that too
+        if not TradingTimeDelta.get_next_trading_time(new_ts):
+            return TradingTimeDelta.get_next_trading_time(new_ts)
+        return new_ts
+
+    def generate_trading_timestamps(start_time: pd.Timestamp, steps: int, increment: timedelta = timedelta(hours=1)) -> pd.DatetimeIndex:
+        """
+        Generate 'steps' trading timestamps starting from start_time,
+        moving in 1-hour increments within trading hours (9:30-16:00).
+        """
+        current = TradingTimeDelta.get_next_trading_time(start_time)
+        timestamps = [current]
+        for _ in range(steps - 1):
+            current = TradingTimeDelta.add_trading_time(current, increment)
+            timestamps.append(current)
+        return pd.DatetimeIndex(timestamps)
 
 # ---------------------- Example Usage ----------------------
 

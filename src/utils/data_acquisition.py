@@ -30,6 +30,7 @@ def fetch_all_data(ticker, range, fetch_range, interval, end_date=None):
         # fetch data in chunks
         while fetch_start < end_date:
             fetch_end = min(fetch_start + fetch_range, end_date)
+            print(f"Fetching data from {pd.Timestamp(fetch_start, unit='s')} to {pd.Timestamp(fetch_end, unit='s')}")
             data_chunk = yf.download(ticker, interval=interval, start=fetch_start, end=fetch_end)
 
             # append chunks together to make one dataframe
@@ -38,6 +39,10 @@ def fetch_all_data(ticker, range, fetch_range, interval, end_date=None):
             else:
                 data = pd.concat([data, data_chunk])
 
+            fetch_start = fetch_end
+
+    elif range is not None:
+        data = yf.download(ticker, interval=interval, end=end_date, start=(end_date - range))
     else:
         data = yf.download(ticker, interval=interval, period='max')
 

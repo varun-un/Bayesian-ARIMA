@@ -9,6 +9,7 @@ import dill
 from pathlib import Path
 from src.ensemble import Ensemble
 import numpy as np
+from datetime import timedelta
 
 class HierarchicalModel:
     """
@@ -24,17 +25,20 @@ class HierarchicalModel:
     """
 
 
-    def __init__(self, ticker: str, ensemble: Ensemble = None):
+    def __init__(self, ticker: str, ensemble: Ensemble = None, memory_save: bool = False):
         """
         Initializes the HierarchicalModel with empty models and seasonality values.
 
         Parameters:
         - ticker: str: The ticker symbol of the stock.
         - ensemble: Ensemble: The ensemble method to use for combining the forecasts. Default is None.
+        - memory_save: bool: Whether to save the models in memory for use after training. Default is False. If True,
+                            after a model is trained, it will be saved to a file and removed from RAM.
         """
 
         self.ticker = ticker
         self.ensemble = ensemble
+        self.memory_save = memory_save
         # dict of BayesianSARIMA models for each timeframe
         self.models = {
             'daily': None,
@@ -56,17 +60,18 @@ class HierarchicalModel:
             'hourly': '1h',
             'minute': '1m'
         }
+        # deliberately choose smaller than max range to avoid memory issues
         self.range = {              # in seconds
-            'daily': 20 * 365 * 24 * 60 * 60,
-            'hourly': 2 * 365 * 24 * 60 * 60,
-            'minute': 30 * 24 * 60 * 60
+            'daily': 10 * 365 * 24 * 60 * 60,
+            'hourly': int(1.8 * 365 * 24 * 60 * 60),
+            'minute': 13 * 24 * 60 * 60
         }
 
         # how much data you can fetch in one GET request
         self.fetch_range = {        # in seconds
             'daily': None,
             'hourly': None,
-            'minute': 3 * 24 * 60 * 60
+            'minute': 7 * 24 * 60 * 60
         }
 
     def train_models(self, num_draws: int = 250, num_tune: int = 250, target_accept: float = 0.95):
@@ -90,11 +95,16 @@ class HierarchicalModel:
             # handle missing values
             y = y.dropna()
 
+            print(f"Determining order for {timeframe} model...")
+
             # generate the models themselves
             order = determine_sarima_order(y, max_p=10, max_d=4, max_q=10, m=seasonality, max_P=5, max_D=2, max_Q=5)   
+            # order = (5, 1, 1, 1, 1, 2)       # example order for testing
             p, d, q, P, D, Q = order
 
             self.models[timeframe] = BayesianSARIMA(name=f"{self.ticker}_{timeframe}", m=seasonality, p=p, d=d, q=q, P=P, D=D, Q=Q)
+
+            print(f"Training {timeframe} model...")
 
             # train the model
             self.models[timeframe].train(y=y, draws=num_draws, tune=num_tune, target_accept=target_accept)
@@ -102,6 +112,9 @@ class HierarchicalModel:
             # save the models
             try:
                 self.pickled_models[timeframe] = self.models[timeframe].save()
+
+                if self.memory_save:
+                    self.models[timeframe] = None
             except Exception as e:
                 print(f"Error saving model: {e}")
     
@@ -118,7 +131,8 @@ class HierarchicalModel:
         """
 
         # get the delta time in seconds
-        delta_t = TradingTimeDelta(end_time)
+        start_time = pd.Timestamp.now()
+        delta_t = TradingTimeDelta(start_time=start_time, end_time=end_time)
 
         # number of steps to take based on interval
         delta_t_hours = delta_t.get_delta_hours()
@@ -139,17 +153,23 @@ class HierarchicalModel:
             else:
                 steps[timeframe] = int(delta)
 
-        forecasts = {}      # forecasted values for each interval - each entry is a pd.Series
+        forecasts = {}      # forecasted values for each interval - each entry is a np array
         for timeframe, model in self.models.items():
 
             data = fetch_all_data(self.ticker, self.range[timeframe], self.fetch_range[timeframe], self.interval[timeframe])
             y = data['Close']
             y = y.dropna()
 
-            forecasts[timeframe] = model.predict(steps[timeframe], last_observations=y)
+
+            y_diff = y.diff(model.d).dropna().values
+            last_observations = y_diff[-(model.p + 1):]
+
+            forecasts[timeframe] = model.predict(steps[timeframe], last_observations=last_observations)
 
             # fix the differncing
             forecasts[timeframe] = invert_differencing(forecasts[timeframe], model.d, y)
+
+            # print(f"Forecasted {timeframe} values: {forecasts[timeframe]}")
 
 
         # get the actual prediction value - take last value or interpolate
@@ -159,33 +179,30 @@ class HierarchicalModel:
             # if the key's delta is a decimal, interpolate by that decimal value
             if deltas[timeframe] % 1 != 0:
                 # get the two closest values
-                lower = forecast.iloc[-2]
-                upper = forecast.iloc[-1]
+                lower = forecast[-2]
+                upper = forecast[-1]
                 # interpolate
                 predictions[timeframe] = lower + (upper - lower) * (deltas[timeframe] % 1)
             else:
-                predictions[timeframe] = forecast.iloc[-1]
+                predictions[timeframe] = forecast[-1]
 
         # label the forecasts with time labels
         labelled_forecasts = {}
         for timeframe, forecast in forecasts.items():
             # get the last time in the series
-            last_time = forecast.index[-1]
-            # create a new date range from the last time to the future time
-            future_range = pd.date_range(start=last_time, periods=steps[timeframe], freq=model.interval)
-            # create a new series with the future range
-            labelled_forecasts[timeframe] = pd.Series(forecast.values, index=future_range)
+            last_time = TradingTimeDelta.get_next_trading_time(pd.Timestamp.now())
 
-            # if the key's delta is a decimal, interpolate by that decimal value. change the last value and its time
-            if deltas[timeframe] % 1 != 0:
-                # get the two closest values
-                lower = labelled_forecasts[timeframe].iloc[-2]
-                upper = labelled_forecasts[timeframe].iloc[-1]
-                # interpolate
-                interpolated_value = lower + (upper - lower) * (deltas[timeframe] % 1)
-                # change the last value and its time
-                labelled_forecasts[timeframe].iloc[-1] = interpolated_value
-                labelled_forecasts[timeframe].index = labelled_forecasts[timeframe].index.shift(1)
+            # create a new date range from the last time to the future time
+            future_range = pd.date_range(start=last_time, periods=steps[timeframe], freq=self.interval[timeframe])
+
+            # if minute or hour model, we need custom date range
+            if timeframe == 'minute':
+                future_range = TradingTimeDelta.generate_trading_timestamps(last_time, steps[timeframe], increment=timedelta(minutes=1))
+            elif timeframe == 'hourly':
+                future_range = TradingTimeDelta.generate_trading_timestamps(last_time, steps[timeframe], increment=timedelta(hours=1))
+
+            # create a new series with the future range
+            labelled_forecasts[timeframe] = pd.Series(forecast, index=future_range)
 
         return predictions, labelled_forecasts
     
@@ -200,7 +217,7 @@ class HierarchicalModel:
         Returns:
         - float: The forecasted value at the specific time in the future.
         """
-        delta_t = TradingTimeDelta(end_time)
+        delta_t = TradingTimeDelta(start_time=pd.Timestamp.now(), end_time=end_time)
         secs = delta_t.get_delta_seconds()          # use as exog variable for ensemble
 
         predictions, _ = self.predict_to_time(end_time)
@@ -261,12 +278,14 @@ class HierarchicalModel:
         for timeframe, model_path in self.pickled_models.items():
             if model_path is not None:
 
-                # naming convention is {ticker}_{timeframe}_{p}_{d}_{q}_{P}_{D}_{Q}.pkl
+                # naming convention is {ticker}_{timeframe}-{p}-{d}-{q}-{P}-{D}-{Q}.pkl
                 # extract the order from the filename
-                order = model_path.stem.split('_')[2:]
+                order = model_path.stem.split('_')[-1].split('-')[1:]
 
                 # convert to integers
                 order = list(map(int, order))
+
+                print(f"Loading {timeframe} model with order: {order}")
 
                 self.models[timeframe] = BayesianSARIMA(name=f"{self.ticker}_{timeframe}", m=self.seasonality[timeframe], p=order[0], d=order[1], q=order[2], P=order[3], D=order[4], Q=order[5])
 

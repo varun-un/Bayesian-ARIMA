@@ -2,7 +2,7 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 from typing import List
 import pandas as pd
-from ..ensemble.ensemble import Ensemble
+from src.ensemble import Ensemble
 
 class RegressionEnsemble(Ensemble):
     """
