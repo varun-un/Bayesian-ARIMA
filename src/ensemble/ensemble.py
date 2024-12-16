@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import pandas as pd
+import numpy as np
 from typing import List
 
 class Ensemble(ABC):
@@ -10,15 +11,27 @@ class Ensemble(ABC):
     """
 
     @abstractmethod
-    def ensemble(self, forecasts: List[float]) -> float:
+    def ensemble(self, forecasts: np.ndarray, exog: np.ndarray = None) -> float:
         """
-        Abstract method to combine forecasts. Performs the forward pass of the ensemble.
+        Method to combine forecasts. Performs the forward pass of the ensemble.
+
+        Parameters:
+        - forecasts (np.ndarray): Array of forecasted values from different models.
+        - exog (np.ndarray): Array of exogenous features, or data augmentation vector. Optional.
         """
         pass
 
     @abstractmethod
-    def train(self, forecasts: List[float], actual: float):
+    def train(self, forecasts: List[np.ndarray], actual: List[float], exog: List[np.ndarray] = None):
         """
-        Abstract method to train the ensemble.
+        Method to train the ensemble. Will perform the backward pass of the ensemble, and use batch training.
+
+        For each parameter, corresponding indices in each list are the corresponding vectors and points for a single sample.
+        The list represents the batch of samples.
+
+        Parameters:
+        - forecasts (List[np.ndarray]): List of forecasted values from different models.
+        - actual (List[float]): List of actual values.
+        - exog (List[np.ndarray]): List of exogenous features, or data augmentation vectors. Optional.
         """
         pass
