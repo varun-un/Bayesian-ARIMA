@@ -15,6 +15,8 @@ class Ensemble(ABC):
         """
         Method to combine forecasts. Performs the forward pass of the ensemble.
 
+        Pass in the order of daily, hourly, and minutely forecasts.
+
         Parameters:
         - forecasts (np.ndarray): Array of forecasted values from different models.
         - exog (np.ndarray): Array of exogenous features, or data augmentation vector. Optional.
@@ -25,6 +27,8 @@ class Ensemble(ABC):
     def train(self, forecasts: List[np.ndarray], actual: List[float], exog: List[np.ndarray] = None):
         """
         Method to train the ensemble. Will perform the backward pass of the ensemble, and use batch training.
+
+        Pass in the order of daily, hourly, and minutely forecasts.
 
         For each parameter, corresponding indices in each list are the corresponding vectors and points for a single sample.
         The list represents the batch of samples.

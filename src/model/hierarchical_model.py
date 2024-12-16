@@ -8,6 +8,7 @@ import pickle
 import dill
 from pathlib import Path
 from src.ensemble import Ensemble
+import numpy as np
 
 class HierarchicalModel:
     """
@@ -187,6 +188,34 @@ class HierarchicalModel:
                 labelled_forecasts[timeframe].index = labelled_forecasts[timeframe].index.shift(1)
 
         return predictions, labelled_forecasts
+    
+    def predict_value(self, end_time: pd.Timestamp) -> float:
+        """
+        Generate a forecasted value at a specific time in the future.
+        Uses the ensemble method if it is provided.
+        
+        Parameters:
+        - end_time: pd.Timestamp: The time to predict to.
+        
+        Returns:
+        - float: The forecasted value at the specific time in the future.
+        """
+        delta_t = TradingTimeDelta(end_time)
+        secs = delta_t.get_delta_seconds()          # use as exog variable for ensemble
+
+        predictions, _ = self.predict_to_time(end_time)
+        
+        if self.ensemble is not None:
+            
+            # turn the predictions into a np vector
+            preds = [predictions['daily'], predictions['hourly'], predictions['minute']]
+            preds = np.array(preds)
+
+            # get the ensemble prediction
+            ensemble_pred = self.ensemble.ensemble(forecasts=preds, exog=secs)
+            return ensemble_pred
+        else:
+            return sum(predictions.values()) / len(predictions)
     
     def save(self):
         """
