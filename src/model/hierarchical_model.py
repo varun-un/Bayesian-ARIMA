@@ -1,6 +1,6 @@
 from .bayesian_sarima import BayesianSARIMA
 from .model_selection import determine_sarima_order
-from src.utils import invert_differencing, fetch_all_data
+from src.utils import invert_differencing, fetch_all_data, TradingTimeDelta
 import yfinance as yf
 import pandas as pd
 from typing import Dict, Tuple
@@ -94,25 +94,26 @@ class HierarchicalModel:
                 self.pickled_models[timeframe] = self.models[timeframe].save()
             except Exception as e:
                 print(f"Error saving model: {e}")
-
-                
-
     
-    def predict_to_time(self, delta_t: pd.Timedelta) -> Tuple[Dict[str, float], Dict[str, pd.Series]]:
+    def predict_to_time(self, end_time: pd.Timestamp) -> Tuple[Dict[str, float], Dict[str, pd.Series]]:
         """
         Generate forecasts from all models up to a specific time in the future.
 
         Parameters:
-        - delta_t: The time into the future to forecast to.
+        - end_time: pd.Timestamp: The time to predict to.
 
         Returns:
         - dict, dict: Dictionary of values predicted at the specific time in the future. Keys are 'daily', 'hourly', 'minute'.
                 Values are the value at the specific time in the future. Linear interpolation is used for delta_t not divisible by the interval.
         """
+
+        # get the delta time in seconds
+        delta_t = TradingTimeDelta(end_time)
+
         # number of steps to take based on interval
-        delta_t_hours = delta_t.total_seconds() / 3600
-        delta_t_days = delta_t.total_seconds() / (3600 * 24)
-        delta_t_minutes = delta_t.total_seconds() / 60
+        delta_t_hours = delta_t.get_delta_hours()
+        delta_t_days = delta_t.get_delta_days()
+        delta_t_minutes = delta_t.get_delta_minutes()
 
         deltas = {
             'daily': delta_t_days,
@@ -178,64 +179,3 @@ class HierarchicalModel:
 
         return predictions, labelled_forecasts
     
-    def predict_to_time_labelled(self, delta_t: pd.Timedelta) -> Dict[str, pd.Series]:
-        """
-        Generate forecasts from all models up to a specific time in the future. Returns a dictionary of time-labelled forecasts.
-
-        Similar to predict_to_time, but its return is a series of data points with time labels. Useful for plotting.
-
-        Parameters:
-        - delta_t: The time into the future to forecast to.
-
-        Returns:
-        - dict: Dictionary of time-labelled forecasts. Keys are 'daily', 'hourly', 'minute'.
-                Values are pandas series of forecasted values with time labels.
-        """
-        # number of steps to take based on interval
-        delta_t_minutes = delta_t.total_seconds() / 60
-        delta_t_hours = delta_t.total_seconds() / 3600
-        delta_t_days = delta_t.total_seconds() / (3600 * 24)
-
-        deltas = {
-            'daily': delta_t_days,
-            'hourly': delta_t_hours,
-            'minute': delta_t_minutes
-        }
-
-        steps = {}      # number of steps to take for each interval
-        for timeframe, delta in deltas.items():
-            if delta % 1 != 0:
-                # round up if not divisible by interval
-                steps[timeframe] = int(delta) + 1  
-            else:
-                steps[timeframe] = int(delta)
-
-        forecasts = {}      # forecasted values for each interval - each entry is a pd.Series
-        for timeframe, model in self.models.items():
-            forecasts[timeframe] = model.predict(steps[timeframe])
-
-        # give each forecast a time label
-        labelled_forecasts = {}
-        for timeframe, forecast in forecasts.items():
-            # get the last time in the series
-            last_time = forecast.index[-1]
-            # create a new date range from the last time to the future time
-            future_range = pd.date_range(start=last_time, periods=steps[timeframe], freq=model.interval)
-            # create a new series with the future range
-            labelled_forecasts[timeframe] = pd.Series(forecast.values, index=future_range)
-
-            # if the key's delta is a decimal, interpolate by that decimal value. change the last value and its time
-            if deltas[timeframe] % 1 != 0:
-                # get the two closest values
-                lower = labelled_forecasts[timeframe].iloc[-2]
-                upper = labelled_forecasts[timeframe].iloc[-1]
-                # interpolate
-                interpolated_value = lower + (upper - lower) * (deltas[timeframe] % 1)
-                # change the last value and its time
-                labelled_forecasts[timeframe].iloc[-1] = interpolated_value
-                labelled_forecasts[timeframe].index = labelled_forecasts[timeframe].index.shift(1)
-
-        return labelled_forecasts
-
-
-        

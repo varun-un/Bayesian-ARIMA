@@ -14,9 +14,7 @@ class WeightedAverageEnsemble(Ensemble):
         return super().train(forecasts, actual)
 
     def ensemble(self, forecasts: List[float]) -> float:
-        """
-        Combine forecasts using weighted average.
-        """
+
         if len(forecasts) != len(self.weights):
             raise ValueError("Number of forecasts and weights must match.")
         
