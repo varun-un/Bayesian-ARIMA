@@ -98,7 +98,7 @@ class HierarchicalModel:
             print(f"Determining order for {timeframe} model...")
 
             # generate the models themselves
-            order = determine_sarima_order(y, max_p=10, max_d=4, max_q=10, m=seasonality, max_P=5, max_D=2, max_Q=5)   
+            order = determine_sarima_order(y, max_p=10, max_d=4, max_q=5, m=seasonality, max_P=2, max_D=2, max_Q=2)   
             # order = (5, 1, 1, 1, 1, 2)       # example order for testing
             p, d, q, P, D, Q = order
 
