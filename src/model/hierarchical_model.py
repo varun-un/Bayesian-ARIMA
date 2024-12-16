@@ -208,3 +208,38 @@ class HierarchicalModel:
 
         with open(filename, 'wb') as f:
             dill.dump(to_save, f)
+
+    def load(self, filename: str = None):
+        """
+        Load the hierarchical model from a file.
+        """
+            
+        if filename is None:
+            filename = Path(__file__).parent.parent.parent / f"models/hierarchical/{self.ticker}.pkl"
+
+        with open(filename, 'rb') as f:
+            loaded = dill.load(f)
+
+            self.ticker = loaded['ticker']
+            self.seasonality = loaded['seasonality']
+            self.interval = loaded['interval']
+            self.range = loaded['range']
+            self.fetch_range = loaded['fetch_range']
+            self.pickled_models = loaded['pickled_models']
+            self.ensemble = loaded['ensemble']
+
+        # load the models
+        for timeframe, model_path in self.pickled_models.items():
+            if model_path is not None:
+
+                # naming convention is {ticker}_{timeframe}_{p}_{d}_{q}_{P}_{D}_{Q}.pkl
+                # extract the order from the filename
+                order = model_path.stem.split('_')[2:]
+
+                # convert to integers
+                order = list(map(int, order))
+
+                self.models[timeframe] = BayesianSARIMA(name=f"{self.ticker}_{timeframe}", m=self.seasonality[timeframe], p=order[0], d=order[1], q=order[2], P=order[3], D=order[4], Q=order[5])
+
+                # load the model
+                self.models[timeframe].load(model_path)
