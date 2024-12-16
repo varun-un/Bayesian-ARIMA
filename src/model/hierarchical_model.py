@@ -1,8 +1,9 @@
 from .bayesian_sarima import BayesianSARIMA
 from .model_selection import determine_sarima_order
+from src.utils import invert_differencing, fetch_all_data
 import yfinance as yf
 import pandas as pd
-from typing import Dict
+from typing import Dict, Tuple
 
 class HierarchicalModel:
     """
@@ -30,6 +31,11 @@ class HierarchicalModel:
             'hourly': None,
             'minute': None
         }
+        self.pickled_models = {
+            'daily': None,
+            'hourly': None,
+            'minute': None
+        }
         self.seasonality = {
             'daily': 5,
             'hourly': 6,
@@ -40,26 +46,20 @@ class HierarchicalModel:
             'hourly': '1h',
             'minute': '1m'
         }
-        self.range = {
-            'daily': '20y',
-            'hourly': '2y',
-            'minute': '1mo'
+        self.range = {              # in seconds
+            'daily': 20 * 365 * 24 * 60 * 60,
+            'hourly': 2 * 365 * 24 * 60 * 60,
+            'minute': 30 * 24 * 60 * 60
         }
 
+        # how much data you can fetch in one GET request
+        self.fetch_range = {        # in seconds
+            'daily': None,
+            'hourly': None,
+            'minute': 3 * 24 * 60 * 60
+        }
 
-    def create_models(self):
-        """
-        Create the BayesianSARIMA models for each timeframe.
-
-        """
-        for timeframe, seasonality in self.seasonality.items():
-
-            order = determine_sarima_order(ticker=self.ticker, max_p=10, max_d=4, max_q=10, m=seasonality, max_P=5, max_D=2, max_Q=5)   
-            p, d, q, P, D, Q = order
-
-            self.models[timeframe] = BayesianSARIMA(name=f"{self.ticker}_{timeframe}", m=seasonality, p=p, d=d, q=q, P=P, D=D, Q=Q)
-
-    def train_models(self):
+    def train_models(self, num_draws: int = 250, num_tune: int = 250, target_accept: float = 0.95):
         """
         Train the BayesianSARIMA models for each timeframe.
 
@@ -67,14 +67,38 @@ class HierarchicalModel:
 
         """
         
-        for timeframe, model in self.models.items():
-            data = yf.download(self.ticker, interval=self.interval[timeframe], period=self.range[timeframe])
+        for timeframe, seasonality in self.seasonality.items():
+
+            # current time in unix seconds
+            current_time = int(pd.Timestamp.now().timestamp())
+            
+            data = fetch_all_data(self.ticker, self.range[timeframe], self.fetch_range[timeframe], self.interval[timeframe], end_date=current_time)
+
+            # target variable
             y = data['Close']
+
+            # handle missing values
             y = y.dropna()
-            model.train(y, draws=1000, tune=1000, target_accept=0.95)
+
+            # generate the models themselves
+            order = determine_sarima_order(y, max_p=10, max_d=4, max_q=10, m=seasonality, max_P=5, max_D=2, max_Q=5)   
+            p, d, q, P, D, Q = order
+
+            self.models[timeframe] = BayesianSARIMA(name=f"{self.ticker}_{timeframe}", m=seasonality, p=p, d=d, q=q, P=P, D=D, Q=Q)
+
+            # train the model
+            self.models[timeframe].train(y=y, draws=num_draws, tune=num_tune, target_accept=target_accept)
+
+            # save the models
+            try:
+                self.pickled_models[timeframe] = self.models[timeframe].save()
+            except Exception as e:
+                print(f"Error saving model: {e}")
+
+                
 
     
-    def predict_to_time(self, delta_t: pd.Timedelta) -> Dict[str, float]:
+    def predict_to_time(self, delta_t: pd.Timedelta) -> Tuple[Dict[str, float], Dict[str, pd.Series]]:
         """
         Generate forecasts from all models up to a specific time in the future.
 
@@ -82,7 +106,7 @@ class HierarchicalModel:
         - delta_t: The time into the future to forecast to.
 
         Returns:
-        - dict: Dictionary of values predicted at the specific time in the future. Keys are 'daily', 'hourly', 'minute'.
+        - dict, dict: Dictionary of values predicted at the specific time in the future. Keys are 'daily', 'hourly', 'minute'.
                 Values are the value at the specific time in the future. Linear interpolation is used for delta_t not divisible by the interval.
         """
         # number of steps to take based on interval
@@ -106,7 +130,16 @@ class HierarchicalModel:
 
         forecasts = {}      # forecasted values for each interval - each entry is a pd.Series
         for timeframe, model in self.models.items():
-            forecasts[timeframe] = model.predict(steps[timeframe])
+
+            data = fetch_all_data(self.ticker, self.range[timeframe], self.fetch_range[timeframe], self.interval[timeframe])
+            y = data['Close']
+            y = y.dropna()
+
+            forecasts[timeframe] = model.predict(steps[timeframe], last_observations=y)
+
+            # fix the differncing
+            forecasts[timeframe] = invert_differencing(forecasts[timeframe], model.d, y)
+
 
         # get the actual prediction value - take last value or interpolate
         predictions = {}
@@ -122,7 +155,28 @@ class HierarchicalModel:
             else:
                 predictions[timeframe] = forecast.iloc[-1]
 
-        return predictions
+        # label the forecasts with time labels
+        labelled_forecasts = {}
+        for timeframe, forecast in forecasts.items():
+            # get the last time in the series
+            last_time = forecast.index[-1]
+            # create a new date range from the last time to the future time
+            future_range = pd.date_range(start=last_time, periods=steps[timeframe], freq=model.interval)
+            # create a new series with the future range
+            labelled_forecasts[timeframe] = pd.Series(forecast.values, index=future_range)
+
+            # if the key's delta is a decimal, interpolate by that decimal value. change the last value and its time
+            if deltas[timeframe] % 1 != 0:
+                # get the two closest values
+                lower = labelled_forecasts[timeframe].iloc[-2]
+                upper = labelled_forecasts[timeframe].iloc[-1]
+                # interpolate
+                interpolated_value = lower + (upper - lower) * (deltas[timeframe] % 1)
+                # change the last value and its time
+                labelled_forecasts[timeframe].iloc[-1] = interpolated_value
+                labelled_forecasts[timeframe].index = labelled_forecasts[timeframe].index.shift(1)
+
+        return predictions, labelled_forecasts
     
     def predict_to_time_labelled(self, delta_t: pd.Timedelta) -> Dict[str, pd.Series]:
         """

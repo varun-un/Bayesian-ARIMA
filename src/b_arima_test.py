@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from model import BayesianARIMA, determine_arima_order, adf_test, BayesianSARIMA, determine_sarima_order
+from utils import invert_differencing
 
 # historical data for Apple Inc.
 ticker = 'AAPL'
@@ -67,14 +68,8 @@ forecasts_diff = bayesian_arima.predict(steps=steps, last_observations=last_obse
 print("Forecasted Differenced Values:")
 print(forecasts_diff)
 
-# Convert differenced forecasts back to original scale
-last_actual = y.iloc[-1]
-forecast_values = []
-current_value = last_actual
-
-for diff in forecasts_diff:
-    current_value += diff
-    forecast_values.append(current_value)
+# invert differencing to get the forecasted prices
+forecast_values = invert_differencing(forecasts_diff, d, y)
 
 # forecast dates
 last_date = y.index[-1]

@@ -111,12 +111,10 @@ def determine_sarima_order(series, max_p=5, max_d=2, max_q=5, m=1, max_P=2, max_
 
 if __name__ == "__main__":
 
-    from ..utils.preprocessor import load_data
+    from src.utils import load_data
 
     ticker = 'AAPL'
     processed_path = f"data/processed/{ticker}_processed.csv"
     df = pd.read_csv(processed_path, index_col='Date', parse_dates=True)
     log_returns = df['Log_Returns']
     
-    order = determine_arima_order(log_returns)
-    print(f"Optimal ARIMA order for {ticker}: {order}")

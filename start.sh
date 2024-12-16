@@ -1,0 +1,2 @@
+echo $PWD
+export PYTHONPATH="$PWD/src:$PYTHONPATH"
