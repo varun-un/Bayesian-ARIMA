@@ -19,7 +19,7 @@ class HierarchicalModel:
     - Daily: Interval = 1 day, Seasonality = 5, Range = 20 years
         * https://www.investopedia.com/terms/w/weekendeffect.asp#:~:text=Key%20Takeaways,of%20the%20immediately%20preceding%20Friday.
         * https://www.researchgate.net/publication/225399137_The_day_of_the_week_effect_on_stock_market_volatility
-    - Hourly: Interval = 1 hour, Seasonality = 6, Range = 2 years
+    - Hourly: Interval = 1 hour, Seasonality = 7, Range = 2 years
     - Minute: Interval = 1 minute, Range = 1 month
 
     """
@@ -52,7 +52,7 @@ class HierarchicalModel:
         }
         self.seasonality = {
             'daily': 5,
-            'hourly': 6,
+            'hourly': 7,
             'minute': 1
         }
         self.interval = {
