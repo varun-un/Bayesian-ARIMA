@@ -1,11 +1,3 @@
----
-fontsize: 12pt
-geometry: margin=1in
-header-includes:
-  - \usepackage{setspace}
-  - \setstretch{1}
-output: pdf_document
----
 
 # Bayesian ARIMA Project Documentation
 
