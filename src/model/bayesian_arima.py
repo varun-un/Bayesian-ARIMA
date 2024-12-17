@@ -1,4 +1,5 @@
-# Bayesian code inspired off math described in: hptps://www.columbia.edu/~mh2078/MachineLearningORFE/MCMC_Bayes.pdf
+# Bayesian code inspired off math described in: hptps://www.columbia.edu/~mh2078/MachineLearningORFE/MCMC_Bayes.pdf 
+# and https://support.sas.com/resources/papers/proceedings19/3188-2019.pdf
 
 import pymc as pm
 import numpy as np
@@ -33,7 +34,7 @@ class BayesianARIMA:
 
     def train(self, y: pd.Series, draws: int = 1000, tune: int = 1000, target_accept: float = 0.95):
         """
-        Train the Bayesian ARIMA model using PyMC3.
+        Train the Bayesian ARIMA model using PyMC.
         
         Samples from the posterior distribution using MCMC.
         Builds Bayesian model around each AR and MA parameter

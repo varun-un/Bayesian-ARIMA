@@ -99,7 +99,7 @@ class HierarchicalModel:
 
             # generate the models themselves
             order = determine_sarima_order(y, max_p=10, max_d=4, max_q=5, m=seasonality, max_P=2, max_D=2, max_Q=2)   
-            # order = (5, 1, 1, 1, 1, 2)       # example order for testing
+            # order = (2, 1, 1, 1, 1, 2)       # example order for testing
             p, d, q, P, D, Q = order
 
             self.models[timeframe] = BayesianSARIMA(name=f"{self.ticker}_{timeframe}", m=seasonality, p=p, d=d, q=q, P=P, D=D, Q=Q)

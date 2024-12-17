@@ -74,7 +74,7 @@ def main():
     plt.figure(figsize=(12, 6))
 
     # Plot historical close prices
-    plt.plot(historical_data.index, historical_data['Close'], label='Historical', color='black', linewidth=2)
+    plt.plot(historical_data.index, historical_data['Close'], label='Historical', color='black', linewidth=1)
 
     # plot each model's forecast
     colors = {'daily': 'blue', 'hourly': 'green', 'minute': 'red'}
