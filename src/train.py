@@ -34,4 +34,4 @@ if __name__ == '__main__':
     main()
 
     # python3 train.py AAPL --num_draws 500 --num_tune 200 --target_accept 0.9
-    # python3 src/train.py AAPL --num_draws 2 --num_tune 2 --target_accept 0.9
+    # python3 src/train.py MSFT --num_draws 200 --num_tune 200 --target_accept 0.9

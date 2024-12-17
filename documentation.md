@@ -1,3 +1,12 @@
+---
+fontsize: 12pt
+geometry: margin=1in
+header-includes:
+  - \usepackage{setspace}
+  - \setstretch{1}
+output: pdf_document
+---
+
 # Bayesian ARIMA Project Documentation
 
 This documentation guide will help you understand, set up, and effectively use the Bayesian ARIMA models for time series forecasting. This project has everything from helpful utilities to core functionality to model Bayesian-influenced ARIMA and SARIMA models. Each function has its own docstring which can be consulted if greater code-specific implementation details are needed.
@@ -62,35 +71,40 @@ This code has only been tested on my Windows 11 machine running Ubuntu 20.04.6 L
 This system will work on on Windows as well, if you choose to use [Anaconda to install PyMC](https://www.pymc.io/projects/docs/en/latest/installation.html) or configure your Visual Studio C++ Build Tools on Windows to allow PyMC to call its underlying binaries. However, the following guide will continue under the assumption that you are using a WSL setup, or a Linux system
 
 ### Installation
-0. **Install WSL or Linux**
-   If you have a Linux machine, this "Step 0" can be skipped, but if not, then configure your Windows machine to use WSL2 to run a Unix-based distro.
+- **Install WSL or Linux**
+    If you have a Linux machine, this *Step 1* can be skipped, but if not, then configure your Windows machine to use WSL2 to run a Unix-based distro.
 
-1. **Clone the Repository**
+- **Clone the Repository**
 
-   Begin by cloning the project repository to your local machine:
-   ```bash
-	git clone https://github.com/varun-un/Bayesian-ARIMA
-	cd Bayesian-ARIMA
-	```
+    Begin by cloning the project repository to your local machine:
 
-2.   **Create a Virtual Environment**
-    
-		It's recommended to use a virtual environment to manage dependencies:
-
-   ```bash
-	python3 -m venv venv 
-	source venv/bin/activate # On Windows: venv\Scripts\activate
 ```
-	
-3.   **Install Dependencies**
-Install the required Python packages using `pip`:
-```bash
+git clone https://github.com/varun-un/Bayesian-ARIMA
+cd Bayesian-ARIMA
+```
+
+- **Create a Virtual Environment**
+
+    It's recommended to use a virtual environment to manage dependencies:
+
+```
+python3 -m venv venv
+source venv/bin/activate 
+```
+    
+- **Install Dependencies**
+
+    Install the required Python packages using `pip`:
+
+```
 pip install -r requirements.txt
 ```
 
-4. **Add Relative Import Path**
-Run the following command to add the `src/` folder to the list of paths that Python looks at. This will need to be done every time the console is re-opened, unless you add it to `.bashrc` or a global environment variable.
-```bash
+- **Add Relative Import Path**
+
+    Run the following command to add the `src/` folder to the list of paths that Python looks at. This will need to be done every time the console is re-opened, unless you add it to `.bashrc` or a global environment variable.
+
+```
 export PYTHONPATH="$PWD/src:$PYTHONPATH"
 ```
 
@@ -327,7 +341,7 @@ delta = TradingTimeDelta(start_time=start, end_time=end)
 # Get delta in different units
 print("Delta Minutes:", delta.get_delta_minutes())  # Output: 630
 print("Delta Hours:", delta.get_delta_hours())      # Output: 11
-print("Delta Days:", delta.get_delta_days())        # Output: ~1.615
+print("Delta Days:", delta.get_delta_days())        # Output: 1.615
 
 # Generate future trading timestamps
 future_time = pd.Timestamp("2025-01-15 10:30:00")

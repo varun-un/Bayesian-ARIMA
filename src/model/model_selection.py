@@ -38,8 +38,8 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, m=1):
     # pmdarima call
     model = pmdarima.auto_arima(
         series,
-        start_p=5,
-        start_q=5,
+        start_p= max(0, max_p-2),
+        start_q= max(0, max_q-2),
         max_p=max_p,
         max_q=max_q,
         max_d=max_d,
@@ -49,7 +49,7 @@ def determine_arima_order(series, max_p=5, max_d=2, max_q=5, m=1):
         error_action='ignore',
         suppress_warnings=True,
         stepwise=False,             # False => grid search, True => opt loop
-        maxiter=200,
+        maxiter=100,
         max_order=None,
         information_criterion='aic',     # better at future predictions than 'bic'
     )
@@ -74,8 +74,8 @@ def determine_sarima_order(series, max_p=5, max_d=2, max_q=5, m=1, max_P=2, max_
     # pmdarima call
     model = pmdarima.auto_arima(
         series,
-        start_p=5,
-        start_q=5,
+        start_p= max(0, max_p-2),
+        start_q= max(0, max_q-2),
         max_p=max_p,
         max_q=max_q,
         max_d=max_d,
@@ -90,7 +90,7 @@ def determine_sarima_order(series, max_p=5, max_d=2, max_q=5, m=1, max_P=2, max_
         error_action='ignore',
         suppress_warnings=True,
         stepwise=False,             # False => grid search, True => opt loop
-        maxiter=25,                # more iterations for seasonal
+        maxiter=150,                # more iterations for seasonal
         max_order=None,
         information_criterion='aic',     # better at future predictions than 'bic'
     )

@@ -162,7 +162,8 @@ class HierarchicalModel:
 
 
             y_diff = y.diff(model.d).dropna().values
-            last_observations = y_diff[-(model.p + 1):]
+            last_observations = y_diff
+
 
             forecasts[timeframe] = model.predict(steps[timeframe], last_observations=last_observations)
 
@@ -176,14 +177,18 @@ class HierarchicalModel:
         predictions = {}
 
         for timeframe, forecast in forecasts.items():
-            # if the key's delta is a decimal, interpolate by that decimal value
-            if deltas[timeframe] % 1 != 0:
-                # get the two closest values
-                lower = forecast[-2]
-                upper = forecast[-1]
-                # interpolate
-                predictions[timeframe] = lower + (upper - lower) * (deltas[timeframe] % 1)
-            else:
+            try:
+                # if the key's delta is a decimal, interpolate by that decimal value
+                if deltas[timeframe] % 1 != 0:
+                    # get the two closest values
+                    lower = forecast[-2]
+                    upper = forecast[-1]
+                    # interpolate
+                    predictions[timeframe] = lower + (upper - lower) * (deltas[timeframe] % 1)
+                else:
+                    predictions[timeframe] = forecast[-1]
+            except Exception as e:
+                # not enough data to interpolate
                 predictions[timeframe] = forecast[-1]
 
         # label the forecasts with time labels
